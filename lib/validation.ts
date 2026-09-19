@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ROLES } from "@/models/User";
 import { MAX_GRADE, MIN_GRADE } from "@/models/Section";
+import { DIFFICULTIES, OPTION_COUNT } from "@/models/Question";
 
 /** A 24-character hex Mongo ObjectId, as it appears in a URL or JSON body. */
 export const objectIdSchema = z
@@ -116,3 +117,48 @@ export type SectionInput = z.infer<typeof sectionSchema>;
 export type SubjectInput = z.infer<typeof subjectSchema>;
 export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
 export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+
+// ---------------------------------------------------------------------------
+// Phase 3 — question bank
+// ---------------------------------------------------------------------------
+
+const optionSchema = z
+  .string()
+  .trim()
+  .min(1, "Every option needs some text.")
+  .max(500, "That option is too long — 500 characters maximum.");
+
+/*
+ * Note again what is absent: schoolId and createdBy. Both come from the
+ * verified session, and Zod strips a smuggled one rather than passing it on.
+ */
+export const questionSchema = z.object({
+  subjectId: objectIdSchema,
+  text: z
+    .string()
+    .trim()
+    .min(1, "The question needs some text.")
+    .max(2000, "That question is too long — 2000 characters maximum."),
+  // Exactly four, no more and no fewer. A three-option question would break
+  // every screen that renders A–D.
+  options: z
+    .array(optionSchema)
+    .length(OPTION_COUNT, `A question needs exactly ${OPTION_COUNT} options.`),
+  correctOptionIndex: z.coerce
+    .number()
+    .int("Pick which option is correct.")
+    .min(0, "Pick which option is correct.")
+    .max(
+      OPTION_COUNT - 1,
+      `The correct option has to be one of the ${OPTION_COUNT}.`
+    ),
+  difficulty: z.enum(DIFFICULTIES, {
+    message: "Pick easy, medium or hard.",
+  }),
+  imageUrl: z
+    .union([z.string().trim().url("That image link doesn't look like a URL."), z.literal("")])
+    .optional()
+    .nullable(),
+});
+
+export type QuestionInput = z.infer<typeof questionSchema>;

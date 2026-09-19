@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/brand/wordmark";
 import { BubbleGrid } from "@/components/brand/bubble-grid";
 import { Marker } from "@/components/brand/marker";
-import { HOME_FOR_ROLE, getSession } from "@/lib/auth";
+import { HOME_FOR_ROLE } from "@/lib/auth";
+import { getLiveSession } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const session = await getSession();
+  // getLiveSession, not getSession: a valid token whose account is gone
+  // must not be redirected into a role area that will bounce it straight back.
+  const session = await getLiveSession();
   if (session) redirect(HOME_FOR_ROLE[session.role]);
 
   return (

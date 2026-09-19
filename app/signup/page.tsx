@@ -3,13 +3,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthShell, AuthSwitch } from "@/components/auth/auth-shell";
 import { SignupForm } from "@/components/auth/signup-form";
-import { HOME_FOR_ROLE, getSession } from "@/lib/auth";
+import { HOME_FOR_ROLE } from "@/lib/auth";
+import { getLiveSession } from "@/lib/current-user";
 
 export const metadata: Metadata = { title: "Create your school" };
 
 export default async function SignupPage() {
   // Already signed in? Go where you belong instead of signing up twice.
-  const session = await getSession();
+  // getLiveSession, not getSession: a valid token whose account is gone
+  // must not be redirected into a role area that will bounce it straight back.
+  const session = await getLiveSession();
   if (session) redirect(HOME_FOR_ROLE[session.role]);
 
   return (

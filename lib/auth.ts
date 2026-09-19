@@ -154,8 +154,21 @@ export async function requireSession(): Promise<SessionClaims> {
  * not a client-side check that can be skipped with devtools.
  */
 export async function requireRole(role: Role): Promise<SessionClaims> {
+  return requireAnyRole([role]);
+}
+
+/**
+ * The same gate for an area more than one role may use — the question bank is
+ * under /teacher but admins work in it too.
+ *
+ * Anyone whose role is not in the list goes to their own home, so a student
+ * typing the URL never sees the page, not even for a frame.
+ */
+export async function requireAnyRole(
+  roles: readonly Role[]
+): Promise<SessionClaims> {
   const session = await requireSession();
-  if (session.role !== role) redirect(HOME_FOR_ROLE[session.role]);
+  if (!roles.includes(session.role)) redirect(HOME_FOR_ROLE[session.role]);
   return session;
 }
 

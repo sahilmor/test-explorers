@@ -6,8 +6,9 @@ export const metadata: Metadata = { title: "Teacher" };
 export const dynamic = "force-dynamic";
 
 export default async function TeacherHome() {
-  // The layout already gated this, but asking again costs nothing and keeps
-  // the page honest if it is ever moved.
+  // The layout lets admins into /teacher so they can reach the question bank.
+  // This page is a teacher's own view, so it narrows the gate back down —
+  // an admin who lands here is sent to /admin.
   await requireRole("teacher");
 
   return (

@@ -3,12 +3,15 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthShell, AuthSwitch } from "@/components/auth/auth-shell";
 import { LoginForm } from "@/components/auth/login-form";
-import { HOME_FOR_ROLE, getSession } from "@/lib/auth";
+import { HOME_FOR_ROLE } from "@/lib/auth";
+import { getLiveSession } from "@/lib/current-user";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage() {
-  const session = await getSession();
+  // getLiveSession, not getSession: a valid token whose account is gone
+  // must not be redirected into a role area that will bounce it straight back.
+  const session = await getLiveSession();
   if (session) redirect(HOME_FOR_ROLE[session.role]);
 
   return (

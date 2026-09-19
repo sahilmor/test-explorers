@@ -3,11 +3,11 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 2 — school setup.** There is no question bank and no
-test-taking yet. What works: school signup, login/logout, role-gated areas for
-admins, teachers and students, hard separation between one school's data and
-another's, and the admin screens that take a school from empty to populated —
-sections, subjects, teachers, and students one at a time or by CSV import.
+**Status: Phase 3 — question bank.** There is no test creation,
+assignment or test-taking yet. What works: school signup, login/logout,
+role-gated areas, hard separation between one school's data and another's, the
+admin screens that take a school from empty to populated, and a searchable
+multiple-choice question bank that teachers and admins fill by hand or by CSV.
 
 ## Stack
 
@@ -29,6 +29,9 @@ sections, subjects, teachers, and students one at a time or by CSV import.
 | `models/School.ts`         | `School` { name, slug, plan, planValidUntil }                    |
 | `models/Section.ts`        | `Section` { schoolId, name, grade }                              |
 | `models/Subject.ts`        | `Subject` { schoolId, name }                                     |
+| `models/Question.ts`       | `Question` { schoolId, subjectId, text, imageUrl, options[4], correctOptionIndex, difficulty, createdBy } |
+| `lib/question-bank.ts`     | Question list/paging/filters, CRUD, CSV import, per-subject counts |
+| `lib/questions-shared.ts`  | Question constants with no Mongoose import, safe in the browser  |
 | `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
@@ -39,6 +42,9 @@ sections, subjects, teachers, and students one at a time or by CSV import.
 | `app/api/teachers`         | Teacher list (searchable) and create                             |
 | `app/api/students*`        | Student list (search + section filter), create, CSV bulk import  |
 | `app/admin/*`              | The four setup screens plus the overview checklist               |
+| `app/api/questions*`       | Question list (paged, filtered), CRUD, CSV import, summary       |
+| `app/api/uploads/*`        | Question diagram upload to Vercel Blob                           |
+| `app/teacher/question-bank`| The question bank, open to teachers and admins                   |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -75,10 +81,11 @@ sections, subjects, teachers, and students one at a time or by CSV import.
 
 ## Environment variables
 
-| Name          | Required | Description                                           |
-| ------------- | -------- | ------------------------------------------------------ |
-| `MONGODB_URI` | yes      | MongoDB connection string                              |
-| `JWT_SECRET`  | yes      | Signs session tokens. 32+ chars. Changing it signs everyone out |
+| Name                    | Required | Description                                           |
+| ----------------------- | -------- | ------------------------------------------------------ |
+| `MONGODB_URI`           | yes      | MongoDB connection string                              |
+| `JWT_SECRET`            | yes      | Signs session tokens. 32+ chars. Changing it signs everyone out |
+| `BLOB_READ_WRITE_TOKEN` | no       | Vercel Blob, for question diagrams. Without it, image upload returns a clear 501 and everything else works |
 
 `.env.local` is gitignored. Never commit real credentials.
 
@@ -135,3 +142,28 @@ an email that appears twice in the same file.
 Imports are capped at 300 rows per file. Each new student needs a hashed
 password, and that is the slow part — the cap keeps a single import inside the
 function timeout. Larger intakes go in as several files.
+
+
+## The question bank
+
+Teachers and admins share `/teacher/question-bank`. Students cannot reach it —
+the route's layout gate allows only those two roles, and every question
+endpoint is wrapped with `roles: ["teacher", "admin"]`.
+
+A question is always four options with exactly one correct, because that is
+what the test-taking UI will render. The add/edit form makes the whole option
+row the radio's label: clicking anywhere on it marks that option correct, and
+the selected row lifts onto a hard shadow with a filled letter badge. A small
+radio dot is not enough signal for the one field where a mistake silently
+produces a wrong answer key.
+
+The CSV import is the same component as the Phase 2 student import, configured
+differently — `components/admin/csv-import-flow.tsx`. Columns are `subject`,
+`question`, `optionA`–`optionD`, `correct` and `difficulty`. `correct` accepts
+A–D or 1–4, because spreadsheets export both. Subjects resolve by name within
+the importing school only. Imports are capped at 500 rows per file.
+
+The stat row at the top counts questions per subject, zeroes included, and each
+chip doubles as a subject filter. The zeroes are the point: they show where the
+bank is thin, which matters once test creation needs "pick N questions from a
+subject".

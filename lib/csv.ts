@@ -186,3 +186,27 @@ Aisha Khan,aisha.khan@riverbend.edu,Grade 9 - A
 Ben Okoro,ben.okoro@riverbend.edu,Grade 9 - A
 Chen Wei,chen.wei@riverbend.edu,Grade 10 - B
 `;
+
+/** The columns a question import file must have. */
+export const QUESTION_CSV_COLUMNS = [
+  "subject",
+  "question",
+  "optionA",
+  "optionB",
+  "optionC",
+  "optionD",
+  "correct",
+  "difficulty",
+] as const;
+
+/**
+ * A downloadable example, offered next to the drop zone.
+ *
+ * The second row deliberately contains a comma inside a quoted field, because
+ * that is the case people get wrong when hand-writing a file.
+ */
+export const QUESTION_CSV_TEMPLATE = `subject,question,optionA,optionB,optionC,optionD,correct,difficulty
+Physics,What is the SI unit of force?,Newton,Joule,Watt,Pascal,A,easy
+Physics,"If a car accelerates from 0 to 20 m/s in 4 s, what is its acceleration?",4 m/s²,5 m/s²,80 m/s²,0.2 m/s²,B,medium
+Physics,Which quantity is conserved in an elastic collision?,Only momentum,Only kinetic energy,Both momentum and kinetic energy,Neither,C,hard
+`;

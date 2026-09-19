@@ -185,3 +185,40 @@ Deleting a section that still has students returns 409 with the count, instead
 of leaving students pointing at a section that no longer exists. Deleting a
 subject is allowed — it cannot orphan anyone — and the response reports how many
 teachers were unassigned as a result.
+
+## Phase 3: the question bank
+
+The same rule again, with two additions worth naming.
+
+### A shared area still has a hard role gate
+
+`/teacher/question-bank` is used by teachers *and* admins, so the `/teacher`
+layout gates on `["teacher", "admin"]` rather than a single role, via
+`requireAnyRole`. `/teacher` itself then narrows back to teachers only, so an
+admin who lands on the teacher home is sent to `/admin`.
+
+A student is in neither list. Their request is redirected in the layout before
+any markup exists, and every question endpoint independently returns 403 — the
+page gate and the API gate are separate checks, not one relied on twice.
+
+### The subject id is checked, never trusted
+
+Creating or editing a question sends a `subjectId`. `assertOwnedSubject` looks
+it up with the school filter attached, so another school's subject produces a
+400 rather than a question quietly linked across the tenant boundary. The CSV
+import resolves subjects by *name*, against a map built from
+`Subject.find({ schoolId })` — a file naming another school's subject matches
+nothing and every row is reported as skipped.
+
+### Confirming these tests have teeth too
+
+Remove the school filter from two places in `lib/question-bank.ts`:
+
+```ts
+const query: QueryFilter<QuestionDoc> = {};        // was { schoolId }
+Question.findOneAndUpdate({ _id: id }, …)          // was { _id: id, schoolId }
+```
+
+Then `npm test`. Four cases go red: the list leaking another school's
+questions, the cross-school read, and both cross-school writes. This was
+verified when the suite was written.
