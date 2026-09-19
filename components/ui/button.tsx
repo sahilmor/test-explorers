@@ -2,34 +2,54 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
+/*
+ * House button. Two things make it ours:
+ *
+ *  - a 2px ink border and a hard, blur-free offset shadow
+ *  - real motion: it lifts 2px toward the cursor on hover and slams flat on
+ *    press, rather than fading a background colour
+ *
+ * Motion is suppressed under prefers-reduced-motion.
+ */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  [
+    "group/button relative inline-flex shrink-0 items-center justify-center gap-2",
+    "font-display font-bold tracking-tight whitespace-nowrap select-none",
+    "rounded-lg border-2 border-ink",
+    "transition-[transform,box-shadow,background-color] duration-150 ease-[var(--ease-snap)]",
+    "hover:-translate-x-[2px] hover:-translate-y-[2px]",
+    "active:translate-x-[2px] active:translate-y-[2px] active:shadow-none",
+    "motion-reduce:transform-none motion-reduce:transition-colors",
+    "outline-none focus-visible:ring-4 focus-visible:ring-cobalt/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper",
+    "disabled:pointer-events-none disabled:opacity-45 disabled:shadow-none",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  ],
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        default:
+          "bg-lime text-ink shadow-[3px_3px_0_var(--ink)] hover:shadow-[5px_5px_0_var(--ink)] hover:bg-[color-mix(in_srgb,var(--lime),white_12%)]",
+        coral:
+          "bg-coral text-ink shadow-[3px_3px_0_var(--ink)] hover:shadow-[5px_5px_0_var(--ink)] hover:bg-[color-mix(in_srgb,var(--coral),white_10%)]",
+        ink: "bg-ink text-paper shadow-[3px_3px_0_var(--coral)] hover:shadow-[5px_5px_0_var(--coral)] hover:bg-[color-mix(in_srgb,var(--ink),white_12%)]",
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "bg-paper-pure text-ink shadow-[3px_3px_0_var(--ink)] hover:shadow-[5px_5px_0_var(--ink)] hover:bg-lime-wash",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-        ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "bg-paper-deep text-ink shadow-[3px_3px_0_var(--ink)] hover:shadow-[5px_5px_0_var(--ink)] hover:bg-lime-wash",
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-danger text-white shadow-[3px_3px_0_var(--ink)] hover:shadow-[5px_5px_0_var(--ink)] hover:bg-[color-mix(in_srgb,var(--danger),white_10%)]",
+        // Flat variants opt out of the border/shadow entirely.
+        ghost:
+          "border-transparent shadow-none hover:translate-x-0 hover:translate-y-0 active:translate-x-0 active:translate-y-0 hover:bg-lime-wash",
+        link: "border-transparent shadow-none underline decoration-2 underline-offset-4 hover:translate-x-0 hover:translate-y-0 active:translate-x-0 active:translate-y-0 decoration-lime hover:decoration-coral",
       },
       size: {
-        default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+        default: "h-11 px-5 text-sm",
+        sm: "h-9 px-3.5 text-[0.8rem]",
+        lg: "h-14 px-7 text-base",
+        xl: "h-16 px-9 text-lg",
+        icon: "size-11",
+        "icon-sm": "size-9",
       },
     },
     defaultVariants: {

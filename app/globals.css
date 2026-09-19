@@ -2,129 +2,279 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* ==========================================================================
+   School Online Test Manager — design system
+   --------------------------------------------------------------------------
+   One place to change the look of every screen. Three layers:
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+     1. :root primitives  — the raw brand palette, type scale, shadows.
+     2. semantic aliases  — --background, --primary, etc. These are what
+                            shadcn components read, so retheming shadcn means
+                            editing them here and nothing else.
+     3. @theme inline     — exposes both to Tailwind as utilities
+                            (bg-lime, shadow-hard, font-display, text-display-lg…).
+
+   House style: warm paper, near-black ink, acid lime as the primary, coral and
+   cobalt as accents. Hard offset shadows and 2px ink borders instead of soft
+   drop shadows. Buttons and inputs physically move when you press them.
+   ========================================================================== */
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* ---- brand palette ---------------------------------------------------- */
+  --ink: #12100e; /* warm near-black: borders, body text, shadows */
+  --ink-soft: #554d42; /* secondary text — 8.4:1 on paper */
+  --ink-faint: #8c8275; /* placeholders, captions — 3.6:1, large/decorative only */
+
+  --paper: #faf5e9; /* warm off-white page background */
+  --paper-deep: #f1e9d6; /* inset panels, table stripes */
+  --paper-pure: #fffdf7; /* raised surfaces — cards, inputs */
+
+  --lime: #c6f135; /* PRIMARY. Always pair with --ink text (16:1) */
+  --lime-deep: #a8cf1c; /* pressed / hover */
+  --lime-wash: #eefabf; /* tinted backgrounds */
+
+  --coral: #ff5a36; /* accent. Ink text on coral = 6.3:1 */
+  --coral-deep: #e2411f;
+  --coral-wash: #ffdfd6;
+
+  --cobalt: #2b3dff; /* accent. White text on cobalt = 7.1:1 */
+  --cobalt-deep: #1b28c4;
+  --cobalt-wash: #dfe2ff;
+
+  --danger: #cf2317;
+  --danger-wash: #ffe1de;
+
+  /* ---- geometry --------------------------------------------------------- */
+  --radius: 0.75rem;
+  --border-w: 2px;
+
+  /* Hard offset shadows. No blur — that is the whole point. */
+  --shadow-hard-xs: 2px 2px 0 var(--ink);
+  --shadow-hard-sm: 3px 3px 0 var(--ink);
+  --shadow-hard: 5px 5px 0 var(--ink);
+  --shadow-hard-lg: 8px 8px 0 var(--ink);
+  --shadow-hard-lime: 5px 5px 0 var(--lime-deep);
+  --shadow-hard-coral: 5px 5px 0 var(--coral-deep);
+
+  /* ---- motion ----------------------------------------------------------- */
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1.2); /* slight overshoot */
+  --dur-fast: 120ms;
+  --dur: 180ms;
+
+  /* ---- semantic aliases (what shadcn components read) -------------------- */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-pure);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-pure);
+  --popover-foreground: var(--ink);
+  --primary: var(--lime);
+  --primary-foreground: var(--ink);
+  --secondary: var(--paper-deep);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-deep);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--coral);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--ink);
+  --input: var(--ink);
+  --ring: var(--cobalt);
+
+  --chart-1: var(--lime);
+  --chart-2: var(--coral);
+  --chart-3: var(--cobalt);
+  --chart-4: var(--ink);
+  --chart-5: var(--lime-deep);
+
+  --sidebar: var(--paper-deep);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--lime);
+  --sidebar-primary-foreground: var(--ink);
+  --sidebar-accent: var(--coral);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--ink);
+  --sidebar-ring: var(--cobalt);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+@theme inline {
+  /* fonts — the variables are set by next/font in app/layout.tsx */
+  --font-display: var(--font-bricolage);
+  --font-sans: var(--font-instrument);
+  --font-heading: var(--font-bricolage);
+  --font-mono: var(--font-geist-mono);
+
+  /* brand colors as Tailwind utilities: bg-lime, border-ink, text-coral… */
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-paper-pure: var(--paper-pure);
+  --color-lime: var(--lime);
+  --color-lime-deep: var(--lime-deep);
+  --color-lime-wash: var(--lime-wash);
+  --color-coral: var(--coral);
+  --color-coral-deep: var(--coral-deep);
+  --color-coral-wash: var(--coral-wash);
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-deep: var(--cobalt-deep);
+  --color-cobalt-wash: var(--cobalt-wash);
+  --color-danger: var(--danger);
+  --color-danger-wash: var(--danger-wash);
+
+  /* semantic aliases, kept so shadcn components keep working */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* type scale — fluid, so headlines stay big on phones without overflowing */
+  --text-display-2xl: clamp(3rem, 1.2rem + 8vw, 7rem);
+  --text-display-2xl--line-height: 0.88;
+  --text-display-2xl--letter-spacing: -0.04em;
+  --text-display-2xl--font-weight: 800;
+
+  --text-display-xl: clamp(2.25rem, 1.1rem + 5.5vw, 4.5rem);
+  --text-display-xl--line-height: 0.92;
+  --text-display-xl--letter-spacing: -0.035em;
+  --text-display-xl--font-weight: 800;
+
+  --text-display-lg: clamp(2rem, 1.1rem + 3.4vw, 3rem);
+  --text-display-lg--line-height: 0.96;
+  --text-display-lg--letter-spacing: -0.03em;
+  --text-display-lg--font-weight: 700;
+
+  --text-display-md: clamp(1.5rem, 1rem + 1.8vw, 2rem);
+  --text-display-md--line-height: 1.04;
+  --text-display-md--letter-spacing: -0.02em;
+  --text-display-md--font-weight: 700;
+
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.16em;
+  --text-eyebrow--font-weight: 700;
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.6);
+  --radius-4xl: calc(var(--radius) * 3.2);
+
+  /* shadow-hard, shadow-hard-lg… */
+  --shadow-hard-xs: var(--shadow-hard-xs);
+  --shadow-hard-sm: var(--shadow-hard-sm);
+  --shadow-hard: var(--shadow-hard);
+  --shadow-hard-lg: var(--shadow-hard-lg);
+  --shadow-hard-lime: var(--shadow-hard-lime);
+  --shadow-hard-coral: var(--shadow-hard-coral);
+
+  --ease-snap: var(--ease-snap);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--ink);
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
-    @apply font-sans;
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* faint paper grid — texture without a background image */
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background-color: var(--lime);
+    color: var(--ink);
+  }
+}
+
+@layer components {
+  /* Eyebrow label — small all-caps kicker above headings. */
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: var(--text-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /*
+   * The house control style: 2px ink border + hard offset shadow, which
+   * physically lifts on hover and slams flat on press. Used by buttons and
+   * anything else that should feel clickable.
+   */
+  .tactile {
+    border: var(--border-w) solid var(--ink);
+    box-shadow: var(--shadow-hard-sm);
+    transition:
+      transform var(--dur-fast) var(--ease-snap),
+      box-shadow var(--dur-fast) var(--ease-snap),
+      background-color var(--dur-fast) ease;
+  }
+
+  .tactile:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-hard);
+  }
+
+  .tactile:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tactile,
+    .tactile:hover,
+    .tactile:active {
+      transform: none;
+      transition: background-color var(--dur-fast) ease;
+    }
   }
 }
