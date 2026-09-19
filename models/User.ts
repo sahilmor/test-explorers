@@ -15,6 +15,9 @@ const userSchema = new Schema(
       index: true,
     },
     name: { type: String, required: true, trim: true, maxlength: 120 },
+    // Unique across the whole system, not per school, because login is by
+    // email alone — two accounts sharing one address would make "who is
+    // signing in?" ambiguous.
     email: {
       type: String,
       required: true,
@@ -24,7 +27,26 @@ const userSchema = new Schema(
     },
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: ROLES, required: true },
-    classId: { type: Schema.Types.ObjectId, required: false, default: null },
+
+    // --- students -------------------------------------------------------
+    // A student sits in exactly one section. Null for admins and teachers.
+    sectionId: {
+      type: Schema.Types.ObjectId,
+      ref: "Section",
+      required: false,
+      default: null,
+    },
+
+    // --- teachers -------------------------------------------------------
+    // What a teacher teaches, and to whom. Empty for admins and students.
+    subjectIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Subject" }],
+      default: [],
+    },
+    sectionIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Section" }],
+      default: [],
+    },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );
@@ -32,6 +54,9 @@ const userSchema = new Schema(
 // Most reads are "this school's users", so lead the compound index with
 // schoolId. Listing by role within a school is the common dashboard query.
 userSchema.index({ schoolId: 1, role: 1 });
+
+// "Students in this section", the students screen's default filter.
+userSchema.index({ schoolId: 1, sectionId: 1 });
 
 export type UserDoc = InferSchemaType<typeof userSchema>;
 

@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { ROLES } from "@/models/User";
+import { MAX_GRADE, MIN_GRADE } from "@/models/Section";
+
+/** A 24-character hex Mongo ObjectId, as it appears in a URL or JSON body. */
+export const objectIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9a-fA-F]{24}$/, "That doesn't look like a valid id.");
 
 export const emailSchema = z
   .string()
@@ -41,7 +48,7 @@ export const createUserSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   role: z.enum(ROLES),
-  classId: z.string().trim().length(24).optional(),
+  sectionId: objectIdSchema.optional(),
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;
@@ -57,3 +64,55 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 — school setup
+// ---------------------------------------------------------------------------
+
+/*
+ * As with Phase 1: none of these schemas has a schoolId field. The school
+ * always comes from the verified session, and Zod strips a smuggled one rather
+ * than passing it through to Mongoose.
+ */
+
+export const sectionSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the section a name, like \"Grade 9 - A\".")
+    .max(80, "That name is too long — 80 characters maximum."),
+  grade: z.coerce
+    .number()
+    .int("Grade has to be a whole number.")
+    .min(MIN_GRADE, `Grade has to be between ${MIN_GRADE} and ${MAX_GRADE}.`)
+    .max(MAX_GRADE, `Grade has to be between ${MIN_GRADE} and ${MAX_GRADE}.`),
+});
+
+export const subjectSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the subject a name, like \"Physics\".")
+    .max(80, "That name is too long — 80 characters maximum."),
+});
+
+export const createTeacherSchema = z.object({
+  name: z.string().trim().min(2, "We need the teacher's name.").max(120),
+  email: emailSchema,
+  // Optional: leave it blank and the server generates one to show once.
+  password: z.union([passwordSchema, z.literal("")]).optional(),
+  subjectIds: z.array(objectIdSchema).max(50).optional(),
+  sectionIds: z.array(objectIdSchema).max(50).optional(),
+});
+
+export const createStudentSchema = z.object({
+  name: z.string().trim().min(2, "We need the student's name.").max(120),
+  email: emailSchema,
+  sectionId: objectIdSchema,
+  password: z.union([passwordSchema, z.literal("")]).optional(),
+});
+
+export type SectionInput = z.infer<typeof sectionSchema>;
+export type SubjectInput = z.infer<typeof subjectSchema>;
+export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
+export type CreateStudentInput = z.infer<typeof createStudentSchema>;

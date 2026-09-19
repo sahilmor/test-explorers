@@ -1,3 +1,4 @@
+import { AdminNav } from "@/components/app/admin-nav";
 import { AppShell } from "@/components/app/app-shell";
 import { loadCurrentUser } from "@/lib/current-user";
 
@@ -12,7 +13,12 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const me = await loadCurrentUser("admin");
 
   return (
-    <AppShell role={me.role} schoolName={me.schoolName} userName={me.userName}>
+    <AppShell
+      role={me.role}
+      schoolName={me.schoolName}
+      userName={me.userName}
+      nav={<AdminNav />}
+    >
       {children}
     </AppShell>
   );

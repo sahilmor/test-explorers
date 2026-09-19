@@ -26,7 +26,7 @@ export const GET = withAuth<Ctx>(async (_request, auth, context) => {
   await connectToDatabase();
 
   const user = await User.findOne({ _id: id, schoolId: auth.schoolId })
-    .select("name email role classId createdAt")
+    .select("name email role sectionId createdAt")
     .lean();
 
   if (!user) {
@@ -39,7 +39,7 @@ export const GET = withAuth<Ctx>(async (_request, auth, context) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      classId: user.classId ? String(user.classId) : null,
+      sectionId: user.sectionId ? String(user.sectionId) : null,
     },
   });
 });

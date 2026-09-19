@@ -14,7 +14,7 @@ export const GET = withAuth(async (_request, auth) => {
 
   const [user, school] = await Promise.all([
     User.findOne({ _id: auth.userId, schoolId: auth.schoolId })
-      .select("name email role classId createdAt")
+      .select("name email role sectionId createdAt")
       .lean(),
     School.findById(auth.schoolId).select("name slug plan planValidUntil").lean(),
   ]);
@@ -29,7 +29,7 @@ export const GET = withAuth(async (_request, auth) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      classId: user.classId ? String(user.classId) : null,
+      sectionId: user.sectionId ? String(user.sectionId) : null,
     },
     school: {
       id: String(school._id),

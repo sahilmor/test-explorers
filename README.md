@@ -3,10 +3,11 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 1 — accounts, roles and tenant isolation.** There is no
-question bank and no test-taking yet. What works: school signup, login/logout,
-role-gated areas for admins, teachers and students, and hard separation between
-one school's data and another's.
+**Status: Phase 2 — school setup.** There is no question bank and no
+test-taking yet. What works: school signup, login/logout, role-gated areas for
+admins, teachers and students, hard separation between one school's data and
+another's, and the admin screens that take a school from empty to populated —
+sections, subjects, teachers, and students one at a time or by CSV import.
 
 ## Stack
 
@@ -23,12 +24,21 @@ one school's data and another's.
 | `lib/accounts.ts`          | Signup (transaction + rollback fallback), password checking      |
 | `lib/db.ts`                | Mongoose connection helper, cached across hot reloads            |
 | `lib/validation.ts`        | Zod schemas — note that none of them accept a `schoolId`         |
+| `lib/school-setup.ts`      | Sections, subjects, teachers, students, CSV import               |
+| `lib/csv.ts`               | The CSV reader, shared by the browser preview and the server     |
 | `models/School.ts`         | `School` { name, slug, plan, planValidUntil }                    |
-| `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, classId }    |
+| `models/Section.ts`        | `Section` { schoolId, name, grade }                              |
+| `models/Subject.ts`        | `Subject` { schoolId, name }                                     |
+| `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
 | `app/api/auth/*`           | signup / login / logout                                          |
 | `app/api/users*`           | School-scoped user list and read/update, for the isolation test  |
+| `app/api/sections*`        | Section list / create / rename / delete                          |
+| `app/api/subjects*`        | Subject list / create / rename / delete                          |
+| `app/api/teachers`         | Teacher list (searchable) and create                             |
+| `app/api/students*`        | Student list (search + section filter), create, CSV bulk import  |
+| `app/admin/*`              | The four setup screens plus the overview checklist               |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -86,9 +96,9 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. The suite's job is to prove that School A cannot read or write School
-B's data. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what each
-case covers and how to confirm the tests actually have teeth.
+bypasses. 80 cases covering tenant isolation, the whole school-setup flow, and
+CSV parsing. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
+each case covers and how to confirm the tests actually have teeth.
 
 `npm run test:only` skips the rebuild when `.next` is already current.
 
@@ -103,3 +113,25 @@ New screens should use those tokens (`bg-lime`, `border-ink`, `text-display-lg`,
 `shadow-[5px_5px_0_var(--ink)]`) rather than introducing new colours or fonts.
 Retheming shadcn means editing the semantic aliases in that file — the
 components themselves read `--primary`, `--background` and friends.
+
+
+## Importing students
+
+An admin drops a CSV on the Students screen with three columns — `name`,
+`email`, `section`. The section has to match a section that already exists in
+the school, by name, case-insensitively.
+
+The file is parsed in the browser first so the admin sees every row and what
+will happen to it before anything is created. On confirm, the raw file is sent
+to the server, which parses it again with the same module — the browser's parse
+is for showing, not for deciding.
+
+One bad row never sinks the batch. Each row is validated on its own, the good
+ones are created, and every skipped row comes back with the line number it came
+from and the specific reason: missing name, missing or malformed email, missing
+section, a section that doesn't exist, an email that already has an account, or
+an email that appears twice in the same file.
+
+Imports are capped at 300 rows per file. Each new student needs a hashed
+password, and that is the slow part — the cap keeps a single import inside the
+function timeout. Larger intakes go in as several files.

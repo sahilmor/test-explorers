@@ -14,11 +14,14 @@ export function AppShell({
   role,
   schoolName,
   userName,
+  nav,
   children,
 }: {
   role: Role;
   schoolName: string;
   userName: string;
+  /** Optional second band under the header, e.g. the admin section nav. */
+  nav?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -44,6 +47,8 @@ export function AppShell({
           </div>
         </div>
       </header>
+
+      {nav}
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
         {children}

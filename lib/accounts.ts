@@ -5,7 +5,20 @@ import School, { TRIAL_DAYS, slugifySchoolName } from "@/models/School";
 import User, { type Role } from "@/models/User";
 import type { SignupInput } from "@/lib/validation";
 
-const BCRYPT_ROUNDS = 12;
+/**
+ * bcrypt work factor.
+ *
+ * 10 rather than 12, deliberately. `bcryptjs` is pure JavaScript and runs on
+ * the request thread: measured on an M-series Mac it costs ~54ms per hash at
+ * 10 and ~203ms at 12. A 300-student CSV import has to hash every row, so cost
+ * 12 would take a minute of CPU on Vercel's slower machines and hit the
+ * function timeout. 10 is the OWASP floor for bcrypt and a common default.
+ *
+ * Existing hashes keep working if this changes — bcrypt stores the cost inside
+ * the hash, so old passwords still verify at whatever factor they were made
+ * with.
+ */
+const BCRYPT_ROUNDS = 10;
 
 export class AccountError extends Error {
   constructor(

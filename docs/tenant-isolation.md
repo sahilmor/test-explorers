@@ -139,3 +139,49 @@ filter back and they pass again. This was verified when the suite was written.
   with an action, the API accepts form-encoded bodies, and tests assert that a
   failed form login redirects back with a short error code and neither the
   email nor the password in the URL.
+
+
+## Phase 2: the same rule, applied to school setup
+
+Sections, subjects, teachers, students and the CSV import all go through the
+same `withAuth` wrapper and the same "schoolId comes from the token" rule. Three
+things are worth calling out, because they are where a multi-tenant app usually
+springs a leak.
+
+### Ids in a request body are checked, not trusted
+
+An admin's own form submits real subject and section ids, so they look
+trustworthy — but they are still client input. `assertOwnedIds` refuses the
+whole request unless every id also matches this school:
+
+```ts
+assertOwnedIds(
+  input.subjectIds,
+  (ids) => Subject.countDocuments({ _id: { $in: ids }, schoolId }),
+  "subjects"
+)
+```
+
+It takes a counting function rather than a model so the school filter is written
+at the call site, where a reviewer can see it.
+
+### Filters can only narrow
+
+The students list takes a `sectionId` query parameter. It is applied *on top of*
+the school filter, never instead of it, so passing another school's section id
+returns an empty list rather than that school's students. There is a test for
+exactly that.
+
+### The CSV import resolves sections by name, within one school
+
+A file naming "Grade 9 - A" can only match a section belonging to the importing
+school, because the lookup table is built from `Section.find({ schoolId })`. A
+test has Northgate's admin upload a file full of Riverbend's section names: zero
+rows are created, and every row is reported as "No section called …".
+
+### Deletes refuse rather than orphan
+
+Deleting a section that still has students returns 409 with the count, instead
+of leaving students pointing at a section that no longer exists. Deleting a
+subject is allowed — it cannot orphan anyone — and the response reports how many
+teachers were unassigned as a result.

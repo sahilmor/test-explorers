@@ -1,3 +1,4 @@
+import { isValidElement } from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
@@ -59,6 +60,20 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * Base UI assumes it is rendering a real <button> unless told otherwise. When
+ * we hand it a link through `render` — which is how every "button that
+ * navigates" in this app is built — it warns, and the element ends up claiming
+ * button semantics it does not have.
+ *
+ * Deciding it here rather than at each call site means a link-shaped button
+ * added in a later phase is correct without anyone remembering this rule.
+ */
+function rendersNativeButton(render: unknown): boolean {
+  if (!isValidElement(render)) return true
+  return render.type === "button"
+}
+
 function Button({
   className,
   variant = "default",
@@ -68,6 +83,9 @@ function Button({
   return (
     <ButtonPrimitive
       data-slot="button"
+      nativeButton={
+        props.nativeButton ?? rendersNativeButton(props.render)
+      }
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

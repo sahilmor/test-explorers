@@ -17,7 +17,7 @@ export const GET = withAuth(async (_request, auth) => {
   await connectToDatabase();
 
   const users = await User.find({ schoolId: auth.schoolId })
-    .select("name email role classId createdAt")
+    .select("name email role sectionId createdAt")
     .sort({ createdAt: 1 })
     .lean();
 
@@ -27,7 +27,7 @@ export const GET = withAuth(async (_request, auth) => {
       name: u.name,
       email: u.email,
       role: u.role,
-      classId: u.classId ? String(u.classId) : null,
+      sectionId: u.sectionId ? String(u.sectionId) : null,
     })),
   });
 });
@@ -65,7 +65,7 @@ export const POST = withAuth(
         email: parsed.data.email,
         passwordHash: await hashPassword(parsed.data.password),
         role: parsed.data.role,
-        classId: parsed.data.classId ?? null,
+        sectionId: parsed.data.sectionId ?? null,
       });
 
       return NextResponse.json(

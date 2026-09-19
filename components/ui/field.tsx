@@ -93,3 +93,20 @@ export function FormError({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+/**
+ * Makes Enter submit a form whose visible submit button lives outside it —
+ * which is the case for every modal here, because the action sits in the
+ * modal's footer and the footer is rendered outside the <form>.
+ *
+ * The button is correctly associated via its `form` attribute, but relying on
+ * that alone for implicit submission is not dependable across engines. A real
+ * submit button inside the form is, and it costs one hidden element.
+ */
+export function ImplicitSubmit() {
+  return (
+    <button type="submit" tabIndex={-1} aria-hidden="true" className="hidden">
+      Submit
+    </button>
+  );
+}
