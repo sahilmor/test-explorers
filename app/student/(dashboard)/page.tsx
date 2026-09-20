@@ -3,12 +3,17 @@ import { ComingSoon, PageHeading } from "@/components/app/app-shell";
 import { MyTests } from "@/components/tests/my-tests";
 import { requireRole } from "@/lib/auth";
 import { listStudentTests } from "@/lib/tests";
+import { sweepSchool } from "@/lib/sweep";
 
 export const metadata: Metadata = { title: "Student" };
 export const dynamic = "force-dynamic";
 
 export default async function StudentHome() {
   const session = await requireRole("student");
+
+  // Close out any attempt in this school whose deadline passed while its
+  // tab was shut, before showing this student their own list.
+  await sweepSchool(session.schoolId);
 
   // Both ids come from the verified token, and the section comes from the
   // student's own record — there is no parameter to ask about another class.

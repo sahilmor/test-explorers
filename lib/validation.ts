@@ -232,3 +232,42 @@ export const autoSelectSchema = z.object({
 export type TestInput = z.infer<typeof testSchema>;
 export type AssignmentInput = z.infer<typeof assignmentSchema>;
 export type AutoSelectInput = z.infer<typeof autoSelectSchema>;
+
+// ---------------------------------------------------------------------------
+// Phase 5 — sitting a test
+// ---------------------------------------------------------------------------
+
+import { OPTION_COUNT as MCQ_OPTION_COUNT } from "@/lib/questions-shared";
+
+/**
+ * One saved response.
+ *
+ * `selectedOptionIndex: null` is meaningful — it means the student opened the
+ * question and left it blank, which the palette shows differently from a
+ * question never visited at all.
+ */
+export const responseSchema = z.object({
+  questionId: objectIdSchema,
+  // `null` FIRST, and no coercion. `z.coerce.number()` turns null into 0,
+  // which would silently record "cleared my answer" as "chose option A" —
+  // a wrong mark on a real paper, from a schema detail.
+  selectedOptionIndex: z
+    .union([
+      z.null(),
+      z
+        .number()
+        .int("Pick one of the options.")
+        .min(0, "Pick one of the options.")
+        .max(MCQ_OPTION_COUNT - 1, "Pick one of the options."),
+    ])
+    .default(null),
+  markedForReview: z.boolean().default(false),
+});
+
+export const saveResponsesSchema = z.object({
+  // A batch, so a flush after a network blip can send everything pending in
+  // one request rather than one request per answer.
+  responses: z.array(responseSchema).min(1).max(500),
+});
+
+export type ResponsePayload = z.infer<typeof responseSchema>;

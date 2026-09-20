@@ -261,3 +261,40 @@ Visibility has two independent layers — the `closesAt: { $gt: now }` query and
 the `testState` filter after it. Removing either one alone changes nothing,
 which is the point; removing both makes "a test drops off the dashboard the
 moment it closes" fail. All of this was verified when the suite was written.
+
+## Phase 5: sitting a test
+
+Two new things worth naming.
+
+### The answer key never leaves the server
+
+The sitting payload selects only `text imageUrl options` from each question.
+`correctOptionIndex` is not in the projection, so it cannot be leaked by
+accident when that shape changes later. A test asserts on the literal JSON
+bytes — `expect(raw).not.toContain("correctOptionIndex")` — and on the
+server-rendered HTML too, because a student with devtools open is the most
+motivated attacker this app has.
+
+### An attempt is reachable only through its own student
+
+Every attempt endpoint takes a *test* id, never an attempt id, and resolves the
+attempt from `{ testId, studentId }` where `studentId` is the token's subject.
+There is no attempt id to guess, and `loadContext` additionally checks that the
+test is assigned to the student's own section before anything else happens.
+
+A student in another section gets 404 from every one of them, including the
+sitting page itself.
+
+### Confirming these tests have teeth too
+
+Make the autosave a no-op — the exact mistake this phase exists to avoid:
+
+```ts
+// lib/attempts.ts — sabotage
+const result = { matchedCount: 1 };   // was an Attempt.updateOne(...)
+```
+
+Then `npm test`. Thirteen cases go red, including every one that reads an
+answer back out of MongoDB, both auto-submit paths and the sweep. An autosave
+that returns 200 and writes nothing cannot survive this suite. Verified when it
+was written.

@@ -23,6 +23,9 @@ export type Harness = {
   stop: () => Promise<void>;
 };
 
+/** Matches CRON_SECRET below; tests send it to call the sweep endpoint. */
+export const TEST_CRON_SECRET = "test-cron-secret";
+
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -84,6 +87,9 @@ export async function startHarness(): Promise<Harness> {
         // Fixed, obviously-fake secret: the tests sign their own forged tokens
         // with a *different* one to prove forgeries are rejected.
         JWT_SECRET: "test-secret-that-is-definitely-long-enough-32+",
+        // The sweep endpoint refuses unauthenticated calls in production, and
+        // the harness runs a production build.
+        CRON_SECRET: "test-cron-secret",
       },
       stdio: ["ignore", "pipe", "pipe"],
     }

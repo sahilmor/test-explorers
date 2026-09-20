@@ -1,19 +1,13 @@
-import { AppShell } from "@/components/app/app-shell";
-import { loadCurrentUser } from "@/lib/current-user";
+import { requireRole } from "@/lib/auth";
 
 /**
  * Server-side role gate for everything under /student.
  *
- * This runs before any markup is produced, so a signed-in user with a
- * different role is redirected to their own area instead of rendering this
- * one. There is no client-side check here to disable.
+ * Only the gate lives here. The app chrome is one level down, in the
+ * (dashboard) group, because the exam screen in (exam) deliberately has none —
+ * a student sitting a paper should not be looking at a Sign out button.
  */
 export default async function StudentLayout({ children }: LayoutProps<"/student">) {
-  const me = await loadCurrentUser("student");
-
-  return (
-    <AppShell role={me.role} schoolName={me.schoolName} userName={me.userName}>
-      {children}
-    </AppShell>
-  );
+  await requireRole("student");
+  return <>{children}</>;
 }

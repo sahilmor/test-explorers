@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
 import { createTest, listTests } from "@/lib/tests";
+import { sweepSchool } from "@/lib/sweep";
 import { fieldErrors, testSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ const AUTHORS = ["teacher", "admin"] as const;
 
 export const GET = withAuth(
   async (_request, auth) => {
+    await sweepSchool(auth.schoolId);
     return NextResponse.json({ tests: await listTests(auth.schoolId) });
   },
   { roles: AUTHORS }

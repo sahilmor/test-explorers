@@ -1,0 +1,536 @@
+import mongoose from "mongoose";
+import { connectToDatabase } from "@/lib/db";
+import { SetupError } from "@/lib/school-setup";
+import Attempt from "@/models/Attempt";
+import Question from "@/models/Question";
+import Subject from "@/models/Subject";
+import Test from "@/models/Test";
+import TestAssignment from "@/models/TestAssignment";
+import User from "@/models/User";
+import { attemptDeadline, type AttemptStatus } from "@/lib/attempts-shared";
+
+/**
+ * Sitting a test.
+ *
+ * Two rules run through everything here:
+ *
+ *  1. The deadline is the server's. It is computed once from
+ *     min(startedAt + duration, test.closesAt) and re-checked on every single
+ *     request that touches an attempt. A client that has drifted, been asleep,
+ *     or been tampered with cannot buy itself another second.
+ *
+ *  2. The correct answers never leave the server. The payload a student's
+ *     browser receives has question text and options and nothing else — there
+ *     is no `correctOptionIndex` field to read out of the network tab.
+ */
+
+export type SittingQuestion = {
+  id: string;
+  text: string;
+  imageUrl: string | null;
+  options: string[];
+};
+
+export type SittingResponse = {
+  questionId: string;
+  selectedOptionIndex: number | null;
+  markedForReview: boolean;
+};
+
+export type SittingState = {
+  attempt: {
+    id: string;
+    status: AttemptStatus;
+    startedAt: string;
+    submittedAt: string | null;
+    lastSavedAt: string | null;
+    responses: SittingResponse[];
+  };
+  test: {
+    id: string;
+    title: string;
+    subjectName: string | null;
+    durationMinutes: number;
+    closesAt: string;
+    questions: SittingQuestion[];
+  };
+  /** The only deadline that counts. Computed here, never by the client. */
+  deadlineAt: string;
+  /** So the client can measure its own clock offset instead of trusting it. */
+  serverNow: string;
+};
+
+/**
+ * Force-submits an attempt whose time is up.
+ *
+ * `submittedAt` is set to the deadline rather than to now, because that is
+ * when the student's time actually ran out — a sweep that runs late should not
+ * record a submission three hours after the fact.
+ */
+async function enforceDeadline(
+  attempt: { _id: mongoose.Types.ObjectId; status: string },
+  deadline: Date,
+  now: Date
+): Promise<AttemptStatus> {
+  if (attempt.status !== "in_progress") return attempt.status as AttemptStatus;
+  if (now < deadline) return "in_progress";
+
+  await Attempt.updateOne(
+    { _id: attempt._id, status: "in_progress" },
+    { $set: { status: "auto_submitted", submittedAt: deadline } }
+  );
+
+  return "auto_submitted";
+}
+
+/** The questions of a test, in the teacher's order, minus the answer key. */
+async function sittingQuestions(
+  schoolId: string,
+  questionIds: mongoose.Types.ObjectId[]
+): Promise<SittingQuestion[]> {
+  if (questionIds.length === 0) return [];
+
+  const docs = await Question.find({ _id: { $in: questionIds }, schoolId })
+    // Deliberately narrow. `correctOptionIndex` is not selected, so it cannot
+    // be leaked by accident when this shape changes later.
+    .select("text imageUrl options")
+    .lean();
+
+  const byId = new Map(docs.map((q) => [String(q._id), q]));
+
+  return questionIds
+    .map((id) => byId.get(String(id)))
+    .filter((q): q is NonNullable<typeof q> => Boolean(q))
+    .map((q) => ({
+      id: String(q._id),
+      text: q.text,
+      imageUrl: q.imageUrl ?? null,
+      options: q.options,
+    }));
+}
+
+/**
+ * Checks that this student may sit this test at all, and returns what is
+ * needed to build or resume an attempt.
+ */
+async function loadContext(schoolId: string, studentId: string, testId: string) {
+  const [student, test] = await Promise.all([
+    User.findOne({ _id: studentId, schoolId, role: "student" })
+      .select("sectionId")
+      .lean(),
+    // schoolId in the filter, so another school's test is simply not found.
+    Test.findOne({ _id: testId, schoolId }).lean(),
+  ]);
+
+  if (!student) throw new SetupError("No such student.", 404);
+  if (!test) throw new SetupError("No such test.", 404);
+  if (!student.sectionId) {
+    throw new SetupError("You're not in a class yet, so no tests are set for you.", 403);
+  }
+
+  // The section assignment is the thing that makes this test theirs. Without
+  // it, a student who guessed a test id would otherwise be let in.
+  const assigned = await TestAssignment.exists({
+    schoolId,
+    testId,
+    sectionId: student.sectionId,
+  });
+
+  if (!assigned) throw new SetupError("This test isn't set for your class.", 404);
+
+  // Narrowed past the null check above, so callers do not have to re-assert it.
+  return { sectionId: student.sectionId as mongoose.Types.ObjectId, test };
+}
+
+/**
+ * Starts a fresh attempt, or resumes the one already running.
+ *
+ * The attempt row is written before any question is returned, so "started the
+ * test but nothing was ever saved" is not a reachable state. Opening the test
+ * in a second tab lands on the same row — the unique index on
+ * { testId, studentId } means a second insert cannot succeed, and the race is
+ * caught and turned into a resume.
+ */
+export async function startOrResumeAttempt(
+  schoolId: string,
+  studentId: string,
+  testId: string,
+  now: Date = new Date()
+): Promise<SittingState> {
+  await connectToDatabase();
+
+  const { sectionId, test } = await loadContext(schoolId, studentId, testId);
+
+  const existing = await Attempt.findOne({ testId, studentId }).lean();
+
+  if (!existing) {
+    // Only block a *new* start outside the window. A student already sitting
+    // keeps their attempt so it can be submitted properly rather than vanish.
+    if (now < test.opensAt) {
+      throw new SetupError("This test hasn't opened yet.", 403);
+    }
+    if (now >= test.closesAt) {
+      throw new SetupError("This test has closed.", 403);
+    }
+    if ((test.questionIds ?? []).length === 0) {
+      throw new SetupError("This test has no questions in it yet.", 409);
+    }
+
+    try {
+      await Attempt.create({
+        schoolId,
+        testId,
+        studentId,
+        sectionId,
+        startedAt: now,
+        status: "in_progress",
+        responses: [],
+      });
+    } catch (error) {
+      // Two tabs hit start at the same moment. The index did its job; fall
+      // through and read back whichever one won.
+      const duplicate =
+        typeof error === "object" &&
+        error !== null &&
+        (error as { code?: number }).code === 11000;
+      if (!duplicate) throw error;
+    }
+  }
+
+  return getAttemptState(schoolId, studentId, testId, now);
+}
+
+/** The current state of a student's attempt, with the deadline enforced. */
+export async function getAttemptState(
+  schoolId: string,
+  studentId: string,
+  testId: string,
+  now: Date = new Date()
+): Promise<SittingState> {
+  await connectToDatabase();
+
+  const { test } = await loadContext(schoolId, studentId, testId);
+
+  const attempt = await Attempt.findOne({ testId, studentId, schoolId }).lean();
+  if (!attempt) throw new SetupError("You haven't started this test.", 404);
+
+  const deadline = attemptDeadline(
+    attempt.startedAt,
+    test.durationMinutes,
+    test.closesAt
+  );
+
+  // Every read is also a deadline check, so simply opening the page after the
+  // time has run out submits the attempt rather than showing a live paper.
+  const status = await enforceDeadline(attempt, deadline, now);
+
+  const [questions, subject] = await Promise.all([
+    sittingQuestions(schoolId, test.questionIds ?? []),
+    Subject.findOne({ _id: test.subjectId, schoolId }).select("name").lean(),
+  ]);
+
+  return {
+    attempt: {
+      id: String(attempt._id),
+      status,
+      startedAt: attempt.startedAt.toISOString(),
+      submittedAt:
+        status === "in_progress"
+          ? null
+          : (attempt.submittedAt ?? deadline).toISOString(),
+      lastSavedAt: attempt.lastSavedAt?.toISOString() ?? null,
+      responses: (attempt.responses ?? []).map((r) => ({
+        questionId: String(r.questionId),
+        selectedOptionIndex:
+          r.selectedOptionIndex === null || r.selectedOptionIndex === undefined
+            ? null
+            : r.selectedOptionIndex,
+        markedForReview: Boolean(r.markedForReview),
+      })),
+    },
+    test: {
+      id: String(test._id),
+      title: test.title,
+      subjectName: subject?.name ?? null,
+      durationMinutes: test.durationMinutes,
+      closesAt: test.closesAt.toISOString(),
+      questions,
+    },
+    deadlineAt: deadline.toISOString(),
+    serverNow: now.toISOString(),
+  };
+}
+
+export type ResponseInput = {
+  questionId: string;
+  selectedOptionIndex: number | null;
+  markedForReview: boolean;
+};
+
+export type SaveResult = {
+  status: AttemptStatus;
+  lastSavedAt: string;
+  deadlineAt: string;
+  serverNow: string;
+  /** Present when the save was refused because time had run out. */
+  expired?: true;
+};
+
+/**
+ * Writes a batch of responses.
+ *
+ * Idempotent by question id: sending the same answer twice is the same as
+ * sending it once, which is what makes a retry after a network blip safe.
+ *
+ * A save arriving after the deadline is refused, and submits the attempt on
+ * the way out — a stale tab that wakes up an hour later cannot append to a
+ * finished paper.
+ */
+export async function saveResponses(
+  schoolId: string,
+  studentId: string,
+  testId: string,
+  responses: ResponseInput[],
+  now: Date = new Date()
+): Promise<SaveResult> {
+  await connectToDatabase();
+
+  const { test } = await loadContext(schoolId, studentId, testId);
+
+  const attempt = await Attempt.findOne({ testId, studentId, schoolId }).lean();
+  if (!attempt) throw new SetupError("You haven't started this test.", 404);
+
+  const deadline = attemptDeadline(
+    attempt.startedAt,
+    test.durationMinutes,
+    test.closesAt
+  );
+
+  if (attempt.status !== "in_progress") {
+    throw new SetupError(
+      "This attempt has already been submitted, so it can't be changed.",
+      409
+    );
+  }
+
+  if (now >= deadline) {
+    await enforceDeadline(attempt, deadline, now);
+    return {
+      status: "auto_submitted",
+      lastSavedAt: (attempt.lastSavedAt ?? attempt.startedAt).toISOString(),
+      deadlineAt: deadline.toISOString(),
+      serverNow: now.toISOString(),
+      expired: true,
+    };
+  }
+
+  // Only questions that are actually on this paper. A crafted request naming
+  // some other question is dropped rather than stored.
+  const allowed = new Set((test.questionIds ?? []).map((id) => String(id)));
+
+  const merged = new Map(
+    (attempt.responses ?? []).map((r) => [
+      String(r.questionId),
+      {
+        questionId: String(r.questionId),
+        selectedOptionIndex: r.selectedOptionIndex ?? null,
+        markedForReview: Boolean(r.markedForReview),
+      },
+    ])
+  );
+
+  for (const incoming of responses) {
+    if (!allowed.has(incoming.questionId)) continue;
+    merged.set(incoming.questionId, {
+      questionId: incoming.questionId,
+      selectedOptionIndex: incoming.selectedOptionIndex,
+      markedForReview: incoming.markedForReview,
+    });
+  }
+
+  const savedAt = now;
+
+  // Guarded on status so a submit landing in between does not get overwritten
+  // by an in-flight autosave.
+  const result = await Attempt.updateOne(
+    { _id: attempt._id, status: "in_progress" },
+    {
+      $set: {
+        responses: [...merged.values()].map((r) => ({
+          questionId: new mongoose.Types.ObjectId(r.questionId),
+          selectedOptionIndex: r.selectedOptionIndex,
+          markedForReview: r.markedForReview,
+        })),
+        lastSavedAt: savedAt,
+      },
+    }
+  );
+
+  if (result.matchedCount === 0) {
+    throw new SetupError(
+      "This attempt has already been submitted, so it can't be changed.",
+      409
+    );
+  }
+
+  return {
+    status: "in_progress",
+    lastSavedAt: savedAt.toISOString(),
+    deadlineAt: deadline.toISOString(),
+    serverNow: now.toISOString(),
+  };
+}
+
+/** Manual submit. Locks the attempt against any further write. */
+export async function submitAttempt(
+  schoolId: string,
+  studentId: string,
+  testId: string,
+  now: Date = new Date()
+): Promise<{ status: AttemptStatus; submittedAt: string; answered: number; total: number }> {
+  await connectToDatabase();
+
+  const { test } = await loadContext(schoolId, studentId, testId);
+
+  const attempt = await Attempt.findOne({ testId, studentId, schoolId }).lean();
+  if (!attempt) throw new SetupError("You haven't started this test.", 404);
+
+  const total = (test.questionIds ?? []).length;
+  const answered = (attempt.responses ?? []).filter(
+    (r) => r.selectedOptionIndex !== null && r.selectedOptionIndex !== undefined
+  ).length;
+
+  // Already finished — report the existing result rather than erroring, so a
+  // double-click or a retry lands on the confirmation screen.
+  if (attempt.status !== "in_progress") {
+    return {
+      status: attempt.status as AttemptStatus,
+      submittedAt: (attempt.submittedAt ?? now).toISOString(),
+      answered,
+      total,
+    };
+  }
+
+  const deadline = attemptDeadline(
+    attempt.startedAt,
+    test.durationMinutes,
+    test.closesAt
+  );
+
+  // Submitting after time is up still counts, it is just recorded as the
+  // automatic submission it really was.
+  const expired = now >= deadline;
+  const submittedAt = expired ? deadline : now;
+  const status: AttemptStatus = expired ? "auto_submitted" : "submitted";
+
+  await Attempt.updateOne(
+    { _id: attempt._id, status: "in_progress" },
+    { $set: { status, submittedAt } }
+  );
+
+  return { status, submittedAt: submittedAt.toISOString(), answered, total };
+}
+
+// ---------------------------------------------------------------------------
+// The sweep
+// ---------------------------------------------------------------------------
+
+export type SweepResult = {
+  checked: number;
+  submitted: number;
+  attemptIds: string[];
+};
+
+/**
+ * Force-submits every in-progress attempt whose deadline has passed.
+ *
+ * This is what makes a closed laptop still produce a submitted paper. It does
+ * not need the student's browser to be alive, or to have been alive at the
+ * moment the time ran out.
+ *
+ * It is deliberately cheap and idempotent so it can be run from anywhere:
+ * a scheduled job, or opportunistically on an ordinary request. Running it
+ * twice submits nothing twice, because each update is guarded on the attempt
+ * still being in progress.
+ */
+export async function sweepExpiredAttempts(
+  options: { schoolId?: string; now?: Date; limit?: number } = {}
+): Promise<SweepResult> {
+  await connectToDatabase();
+
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? 500;
+
+  const filter: Record<string, unknown> = { status: "in_progress" };
+  if (options.schoolId) filter.schoolId = options.schoolId;
+
+  const running = await Attempt.find(filter)
+    .select("testId startedAt schoolId")
+    .sort({ startedAt: 1 })
+    .limit(limit)
+    .lean();
+
+  if (running.length === 0) {
+    return { checked: 0, submitted: 0, attemptIds: [] };
+  }
+
+  // One query for every test involved, rather than one per attempt.
+  const tests = await Test.find({
+    _id: { $in: [...new Set(running.map((a) => String(a.testId)))] },
+  })
+    .select("durationMinutes closesAt")
+    .lean();
+
+  const testById = new Map(tests.map((t) => [String(t._id), t]));
+
+  const expired: mongoose.Types.ObjectId[] = [];
+  const deadlines = new Map<string, Date>();
+
+  for (const attempt of running) {
+    const test = testById.get(String(attempt.testId));
+    // A test deleted out from under a live attempt: close the attempt rather
+    // than leaving it running forever.
+    if (!test) {
+      expired.push(attempt._id);
+      deadlines.set(String(attempt._id), attempt.startedAt);
+      continue;
+    }
+
+    const deadline = attemptDeadline(
+      attempt.startedAt,
+      test.durationMinutes,
+      test.closesAt
+    );
+
+    if (now >= deadline) {
+      expired.push(attempt._id);
+      deadlines.set(String(attempt._id), deadline);
+    }
+  }
+
+  if (expired.length === 0) {
+    return { checked: running.length, submitted: 0, attemptIds: [] };
+  }
+
+  // Each attempt gets its own deadline as its submittedAt, so a sweep that
+  // runs late still records when the time actually ran out.
+  await Promise.all(
+    expired.map((id) =>
+      Attempt.updateOne(
+        { _id: id, status: "in_progress" },
+        {
+          $set: {
+            status: "auto_submitted",
+            submittedAt: deadlines.get(String(id)) ?? now,
+          },
+        }
+      )
+    )
+  );
+
+  return {
+    checked: running.length,
+    submitted: expired.length,
+    attemptIds: expired.map(String),
+  };
+}

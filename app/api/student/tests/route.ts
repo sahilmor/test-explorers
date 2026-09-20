@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { listStudentTests } from "@/lib/tests";
+import { sweepSchool } from "@/lib/sweep";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,10 @@ export const dynamic = "force-dynamic";
  */
 export const GET = withAuth(
   async (_request, auth) => {
+    // Close out anyone in this school whose time ran out while their tab was
+    // shut. Cheap, scoped and capped — see lib/sweep.ts.
+    await sweepSchool(auth.schoolId);
+
     return NextResponse.json({
       tests: await listStudentTests(auth.schoolId, auth.userId),
     });
