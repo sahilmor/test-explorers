@@ -12,12 +12,12 @@ export const maxDuration = 60;
  *
  * Two things trigger it:
  *
- *  1. Vercel Cron, configured in `vercel.json`. Note that Hobby plans run cron
- *     jobs once a day, so on Hobby this is a daily backstop rather than a
- *     minute-by-minute one.
+ *  1. Vercel Cron, configured in `vercel.json`. It is scheduled daily because
+ *     Hobby plans refuse to deploy anything more frequent — a deploy with
+ *     `*\/5 * * * *` is rejected outright. On Pro, tighten that schedule.
  *  2. The opportunistic sweep in `lib/sweep.ts`, which runs on ordinary
- *     student and teacher requests. That is what actually keeps things tidy
- *     minute to minute on any plan.
+ *     student and teacher requests. On a daily-cron plan this is what
+ *     actually keeps things tidy minute to minute.
  *
  * Correctness never depends on either of them running: an expired attempt is
  * also force-submitted the moment anyone reads or writes it, so a student can

@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/sweep-attempts",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }

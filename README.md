@@ -236,12 +236,15 @@ student's browser:
 
 1. The student presses Submit, after a confirmation showing the unanswered count.
 2. Their tab notices the clock hit zero, flushes and submits.
-3. Nothing at all: the sweep force-submits expired attempts. It runs from Vercel
-   Cron *and* opportunistically on ordinary student and teacher requests, which
-   is what keeps things tidy on plans where cron only fires daily. Correctness
-   never depends on either — an expired attempt is force-submitted the moment
-   anyone reads or writes it, so no student ever sees a live paper past their
-   deadline.
+3. Nothing at all: the sweep force-submits expired attempts. It runs from
+   Vercel Cron *and* opportunistically on ordinary student and teacher
+   requests. The cron is scheduled daily because Hobby plans refuse to deploy
+   anything more frequent — on Pro, tighten `vercel.json` to `*/5 * * * *`. On
+   Hobby the opportunistic sweep is what keeps things tidy minute to minute.
+
+   Correctness never depends on either: an expired attempt is force-submitted
+   the moment anyone reads or writes it, so no student ever sees a live paper
+   past their deadline even if no sweep has run at all.
 
 The payload sent to a student's browser has question text and options and
 nothing else. There is no `correctOptionIndex` field to read out of the network
