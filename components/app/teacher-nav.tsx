@@ -18,6 +18,7 @@ export function TeacherNav({ role }: { role: Role }) {
     ...(role === "teacher"
       ? [{ href: "/teacher", label: "Your papers" } as const]
       : [{ href: "/admin", label: "← Back to admin" } as const]),
+    { href: "/teacher/tests", label: "Tests" } as const,
     { href: "/teacher/question-bank", label: "Question bank" } as const,
   ];
 

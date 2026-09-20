@@ -2,6 +2,11 @@ import { z } from "zod";
 import { ROLES } from "@/models/User";
 import { MAX_GRADE, MIN_GRADE } from "@/models/Section";
 import { DIFFICULTIES, OPTION_COUNT } from "@/models/Question";
+import {
+  MAX_AUTO_QUESTIONS,
+  MAX_DURATION_MINUTES,
+  MIN_DURATION_MINUTES,
+} from "@/lib/tests-shared";
 
 /** A 24-character hex Mongo ObjectId, as it appears in a URL or JSON body. */
 export const objectIdSchema = z
@@ -162,3 +167,68 @@ export const questionSchema = z.object({
 });
 
 export type QuestionInput = z.infer<typeof questionSchema>;
+
+// ---------------------------------------------------------------------------
+// Phase 4 — test creation and assignment
+// ---------------------------------------------------------------------------
+
+/** Accepts an ISO string or a datetime-local value and gives back a Date. */
+const dateTimeSchema = z.coerce.date({
+  message: "Pick a date and a time.",
+});
+
+/*
+ * As always: no schoolId and no createdBy. Both come from the verified session.
+ */
+export const testSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(1, "Give the test a title, like \"Unit 3 — Forces\".")
+      .max(200, "That title is too long — 200 characters maximum."),
+    subjectId: objectIdSchema,
+    durationMinutes: z.coerce
+      .number()
+      .int("Duration has to be a whole number of minutes.")
+      .min(MIN_DURATION_MINUTES, "A test needs at least a minute.")
+      .max(
+        MAX_DURATION_MINUTES,
+        `${MAX_DURATION_MINUTES} minutes is the longest a single sitting can be.`
+      ),
+    questionIds: z.array(objectIdSchema).max(500),
+    opensAt: dateTimeSchema,
+    closesAt: dateTimeSchema,
+    sectionIds: z.array(objectIdSchema).max(100).optional(),
+    // The teacher's intent. The server turns this into a stored status.
+    publish: z.boolean().optional(),
+  })
+  // A window that closes before it opens would make the test permanently
+  // invisible rather than throwing, so it is rejected up front.
+  .refine((v) => v.closesAt > v.opensAt, {
+    message: "The closing time has to be after the opening time.",
+    path: ["closesAt"],
+  })
+  // Publishing with no questions would put an empty paper in front of a class.
+  .refine((v) => !v.publish || v.questionIds.length > 0, {
+    message: "Add at least one question before publishing.",
+    path: ["questionIds"],
+  });
+
+export const assignmentSchema = z.object({
+  sectionIds: z.array(objectIdSchema).max(100),
+});
+
+export const autoSelectSchema = z.object({
+  subjectId: objectIdSchema,
+  count: z.coerce
+    .number()
+    .int("Pick a whole number of questions.")
+    .min(1, "Pick at least one question.")
+    .max(MAX_AUTO_QUESTIONS, `${MAX_AUTO_QUESTIONS} is the most you can pull at once.`),
+  difficulty: z.enum(DIFFICULTIES).optional(),
+});
+
+export type TestInput = z.infer<typeof testSchema>;
+export type AssignmentInput = z.infer<typeof assignmentSchema>;
+export type AutoSelectInput = z.infer<typeof autoSelectSchema>;

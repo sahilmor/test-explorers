@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/admin/subjects", label: "Subjects" },
   { href: "/admin/teachers", label: "Teachers" },
   { href: "/admin/students", label: "Students" },
+  { href: "/teacher/tests", label: "Tests" },
   { href: "/teacher/question-bank", label: "Question bank" },
 ] as const;
 

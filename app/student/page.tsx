@@ -1,27 +1,50 @@
 import type { Metadata } from "next";
 import { ComingSoon, PageHeading } from "@/components/app/app-shell";
+import { MyTests } from "@/components/tests/my-tests";
 import { requireRole } from "@/lib/auth";
+import { listStudentTests } from "@/lib/tests";
 
 export const metadata: Metadata = { title: "Student" };
 export const dynamic = "force-dynamic";
 
 export default async function StudentHome() {
-  await requireRole("student");
+  const session = await requireRole("student");
+
+  // Both ids come from the verified token, and the section comes from the
+  // student's own record — there is no parameter to ask about another class.
+  const tests = await listStudentTests(session.schoolId, session.userId);
+
+  const open = tests.filter((t) => t.state === "open").length;
 
   return (
     <div className="space-y-12">
       <PageHeading
         eyebrow="Student"
-        title="Nothing due. Enjoy it."
-        blurb="Tests your teachers set will show up here, with the time you have left to sit them."
+        title={
+          open > 0
+            ? `${open} test${open === 1 ? "" : "s"} waiting for you`
+            : "Nothing due. Enjoy it."
+        }
+        blurb="Papers your teachers set for your class, with the time you have left to sit them."
       />
 
-      <section className="grid gap-5 md:grid-cols-3">
-        <ComingSoon
-          title="Upcoming tests"
-          body="What's been set for your class, when it opens, and how long you get."
-          tone="cobalt"
+      <section>
+        <h2 className="sr-only">My tests</h2>
+        <MyTests
+          initial={tests.map((t) => ({
+            id: t.id,
+            title: t.title,
+            subjectName: t.subjectName,
+            durationMinutes: t.durationMinutes,
+            questionCount: t.questionCount,
+            opensAt: t.opensAt.toISOString(),
+            closesAt: t.closesAt.toISOString(),
+            state: t.state,
+          }))}
         />
+      </section>
+
+      <section className="grid gap-5 md:grid-cols-2">
         <ComingSoon
           title="Sit a test"
           body="One question at a time, answers saved as you go, timer you can see."

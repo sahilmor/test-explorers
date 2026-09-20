@@ -222,3 +222,42 @@ Question.findOneAndUpdate({ _id: id }, …)          // was { _id: id, schoolId 
 Then `npm test`. Four cases go red: the list leaking another school's
 questions, the cross-school read, and both cross-school writes. This was
 verified when the suite was written.
+
+## Phase 4: tests and assignments
+
+The same rule, with one new surface worth naming: the student dashboard.
+
+### A student has no parameter to ask with
+
+`GET /api/student/tests` takes nothing. The school comes from the token and the
+section comes from the student's own record, looked up by the token's user id.
+There is no `sectionId` to tamper with, because there is no `sectionId` in the
+request at all.
+
+A student whose record has no section gets an empty list — not a fallback to
+the whole school's papers, which is the shape this kind of bug usually takes.
+There is a test for exactly that.
+
+### Ids in the body are checked, all three kinds
+
+Creating a test sends a `subjectId`, a list of `questionIds` and a list of
+`sectionIds`. Each is verified against the caller's school before anything is
+stored, and the questions are additionally checked to belong to the chosen
+subject — a stray question from another subject would quietly skew a paper that
+is generated and marked per subject.
+
+### Confirming these tests have teeth too
+
+Remove the school filter from the teacher's list in `lib/tests.ts`:
+
+```ts
+const docs = await Test.find({}).sort({ createdAt: -1 }).lean();   // was { schoolId }
+```
+
+Then `npm test`. Three cases go red: the list leaking another school's papers,
+and both cross-school writes.
+
+Visibility has two independent layers — the `closesAt: { $gt: now }` query and
+the `testState` filter after it. Removing either one alone changes nothing,
+which is the point; removing both makes "a test drops off the dashboard the
+moment it closes" fail. All of this was verified when the suite was written.

@@ -3,11 +3,13 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 3 — question bank.** There is no test creation,
-assignment or test-taking yet. What works: school signup, login/logout,
-role-gated areas, hard separation between one school's data and another's, the
-admin screens that take a school from empty to populated, and a searchable
-multiple-choice question bank that teachers and admins fill by hand or by CSV.
+**Status: Phase 4 — test creation and assignment.** There is no
+test-taking screen yet. What works: school signup, login/logout, role-gated
+areas, hard separation between one school's data and another's, the admin
+screens that take a school from empty to populated, a searchable multiple-choice
+question bank filled by hand or by CSV, and papers built from that bank,
+scheduled, and assigned to sections — appearing on a student's dashboard
+exactly when they open and dropping off when they close.
 
 ## Stack
 
@@ -32,6 +34,10 @@ multiple-choice question bank that teachers and admins fill by hand or by CSV.
 | `models/Question.ts`       | `Question` { schoolId, subjectId, text, imageUrl, options[4], correctOptionIndex, difficulty, createdBy } |
 | `lib/question-bank.ts`     | Question list/paging/filters, CRUD, CSV import, per-subject counts |
 | `lib/questions-shared.ts`  | Question constants with no Mongoose import, safe in the browser  |
+| `models/Test.ts`           | `Test` { schoolId, title, subjectId, durationMinutes, questionIds, opensAt, closesAt, createdBy, status } |
+| `models/TestAssignment.ts` | One row per section a test is assigned to                        |
+| `lib/tests.ts`             | Test CRUD, assignment, auto-generation, the student's list       |
+| `lib/tests-shared.ts`      | Test constants and `testState` / `humanGap`, safe in the browser |
 | `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
@@ -45,6 +51,10 @@ multiple-choice question bank that teachers and admins fill by hand or by CSV.
 | `app/api/questions*`       | Question list (paged, filtered), CRUD, CSV import, summary       |
 | `app/api/uploads/*`        | Question diagram upload to Vercel Blob                           |
 | `app/teacher/question-bank`| The question bank, open to teachers and admins                   |
+| `app/teacher/tests`        | Create, edit, assign and schedule papers                         |
+| `app/api/tests*`           | Test CRUD, assignment, random question selection                 |
+| `app/api/student/tests`    | A student's own list — no parameters, so no other class to ask for |
+| `app/student`              | "My Tests", with upcoming / open / closing-soon states           |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -167,3 +177,26 @@ The stat row at the top counts questions per subject, zeroes included, and each
 chip doubles as a subject filter. The zeroes are the point: they show where the
 bank is thin, which matters once test creation needs "pick N questions from a
 subject".
+
+
+## Tests and their windows
+
+A `Test` carries `opensAt` and `closesAt`, and a `TestAssignment` row per
+section it is set for. A draft has no assignment rows at all — that is what
+"not visible to students" means here, enforced in one place rather than trusted
+at every read. Un-publishing a paper back to draft therefore withdraws it from
+every class.
+
+The stored `status` is `draft`, `scheduled` or `published`, set from the
+teacher's intent and the opening time at the moment they saved. It goes stale
+the instant a scheduled paper's opening time arrives, so **nothing important is
+decided from it**. `testState()` recomputes `draft | scheduled | open | closed`
+from the dates on every read, which means a paper opens and closes on time with
+no cron job and no rows to flip over. The teacher's list, the student's
+dashboard and the sit-a-test route all go through it.
+
+Auto-generation uses MongoDB's `$sample` so the shuffle happens in the database
+rather than by pulling the whole bank back. If the bank is smaller than the
+teacher asked for, it returns what exists and says so rather than quietly
+producing a short paper — and the Phase 3 per-subject counts are shown in the
+subject dropdown so the shortfall is visible before the request is even made.
