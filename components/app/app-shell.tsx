@@ -75,33 +75,3 @@ export function PageHeading({
     </div>
   );
 }
-
-/**
- * Placeholder panel for the parts of each dashboard that arrive in later
- * phases. Says what it will be rather than faking a chart.
- */
-export function ComingSoon({
-  title,
-  body,
-  tone = "lime",
-}: {
-  title: string;
-  body: string;
-  tone?: "lime" | "coral" | "cobalt";
-}) {
-  const bar =
-    tone === "lime" ? "bg-lime" : tone === "coral" ? "bg-coral" : "bg-cobalt";
-
-  return (
-    <div className="relative overflow-hidden rounded-xl border-2 border-ink bg-paper-pure p-6 shadow-[5px_5px_0_var(--ink)]">
-      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-2 ${bar}`} />
-      <h2 className="mt-2 font-display text-lg font-bold tracking-tight text-ink">
-        {title}
-      </h2>
-      <p className="mt-2 text-sm leading-relaxed text-ink-soft">{body}</p>
-      <p className="eyebrow mt-4 inline-block rounded-full border-2 border-ink bg-paper-deep px-2.5 py-1 text-ink">
-        Later phase
-      </p>
-    </div>
-  );
-}
