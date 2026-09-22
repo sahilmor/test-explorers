@@ -3,7 +3,7 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 7 — admin dashboard and billing.**
+**Status: Phase 8 — launch prep. Feature-complete.**
 What works: school signup, login/logout, role-gated areas, hard separation
 between schools, the admin screens that populate a school, a question bank
 filled by hand or CSV, papers built from that bank and scheduled to sections,
@@ -56,6 +56,13 @@ Razorpay payment as the thing that changes it.
 | `lib/billing.ts`           | Opening a payment, applying a verified one, recording a failure   |
 | `lib/dashboard.ts`         | The admin overview's numbers. Every one of them a query           |
 | `lib/platform.ts`          | The owner view — the one module that reads across tenants         |
+| `lib/notifications.ts`     | Who gets told what, once. Throws nothing, ever                    |
+| `lib/email/send.ts`        | Resend over REST. Never throws; no key means a log, not a failure |
+| `lib/email/templates.ts`   | The two emails, inline-styled because clients strip everything    |
+| `lib/observability.ts`     | Error reporting. A no-op without a DSN                            |
+| `lib/config-audit.ts`      | What this deployment actually has configured                      |
+| `lib/site.ts`              | The canonical origin, for links, sitemap and OG tags              |
+| `models/Notification.ts`   | One row per person per thing. The unique index is the lock        |
 | `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
@@ -88,6 +95,13 @@ Razorpay payment as the thing that changes it.
 | `app/api/billing/verify`   | The Checkout callback, signature-checked before anything moves   |
 | `app/api/billing/webhook`  | Razorpay's own account of a payment. The authoritative path      |
 | `app/platform`             | Every school and what it is worth. Owner only, 404 for everyone else |
+| `app/page.tsx`             | The landing page, written for the principal not the student      |
+| `app/pricing`              | Public pricing, every number imported from lib/plans.ts          |
+| `app/privacy`, `app/terms` | Legal pages, with the operator's details still to fill in        |
+| `app/robots.ts`, `app/sitemap.ts` | Crawl rules and the public page list                      |
+| `app/opengraph-image.tsx`  | The share card, generated so it cannot drift from the brand      |
+| `components/marketing/`    | The public shell and the legal page frame                        |
+| `docs/launch-checklist.md` | **The pre-launch checklist**, and what is still outstanding      |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -147,9 +161,9 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. 264 cases covering tenant isolation, the whole school-setup flow,
+bypasses. 275 cases covering tenant isolation, the whole school-setup flow,
 CSV parsing, the question bank, papers and their windows, sitting a paper, and
-marking and results, and billing with its enforcement. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
+marking and results, billing with its enforcement, and notifications. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
 each case covers and how to confirm the tests actually have teeth.
 
 `npm run test:only` skips the rebuild when `.next` is already current.
@@ -399,3 +413,63 @@ to a sign-in page would advertise that the route is real.
 Revenue counts captured payments and nothing else. An order that was opened
 and abandoned is not money, and counting it would be the quickest way to start
 lying to yourself about the business.
+
+
+## Notifications
+
+Two emails, and nothing else. No marketing, no digest, nothing to unsubscribe
+from.
+
+| When | To | Carrying |
+| --- | --- | --- |
+| A paper is published or assigned | Every student in that class | Title, subject, question count, duration, the window |
+| A paper's window closes | Every student who sat it | Their score and a link to the full review |
+
+**Once each.** The triggers all repeat — a teacher pressing save on the assign
+dialog again, the sweep running on every request, two tabs racing — so the
+send is claimed by inserting a row whose unique index does the arbitration
+(`models/Notification.ts`). The insert *is* the lock: whoever's succeeds owns
+the send, and a duplicate-key error is the answer rather than a problem.
+Reassigning a paper to a class that already has it mails nobody; adding a new
+class mails only that class.
+
+**Nothing here can break anything else.** An email is a courtesy on top of an
+action that has already succeeded, so `sendEmail` never throws — a missing key,
+a refused request or a timeout all come back as a result the caller carries on
+from — and the notification functions catch everything above that too. With no
+`RESEND_API_KEY` at all the app logs what it would have sent and continues.
+There is a test that turns the mail provider off mid-run and checks the paper
+is still assigned, still visible to students, and still sittable.
+
+The result email is driven off the same `closesAt` the results gate uses, so it
+can never arrive before the result it links to is visible — a student clicking
+through to a 403 would be worse than no email. Both sends run in `after()`, so
+they happen once the response has already gone out.
+
+## The public site
+
+`/` is written for the person who signs the cheque — the weekend a unit test
+costs a department, and the fact that this is the school's own system rather
+than a marketplace their students get advertised on. `/pricing` imports every
+number from `lib/plans.ts`, the same module the checkout charges from, so a
+price on a marketing page cannot drift from the price actually taken.
+
+`/privacy` and `/terms` describe the software accurately and leave the
+operator's own details as conspicuous highlighted placeholders. They need a
+lawyer before launch; the checklist says so.
+
+`robots.txt` keeps crawlers out of the app, `sitemap.xml` lists only public
+pages, and the share card at `/opengraph-image` is generated from the palette
+rather than checked in as a PNG that would quietly go stale.
+
+## Before launching
+
+[docs/launch-checklist.md](docs/launch-checklist.md) is the list, and most of
+it is checkable rather than recalled: `/platform` reads the running process and
+reports what is actually configured, including the expensive mistake of a
+production deployment still holding Razorpay **test** keys.
+
+Two things are outstanding by design and are written down there rather than
+quietly skipped: the Atlas network allowlist is `0.0.0.0/0` with
+credential-only access (a known Vercel-on-Hobby trade-off), and the legal pages
+need their placeholders filled and a lawyer's read.

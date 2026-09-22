@@ -71,7 +71,7 @@ async function waitForServer(url: string, child: ChildProcess, timeoutMs = 90_00
 }
 
 export async function startHarness(
-  options: { razorpayApiBase?: string } = {}
+  options: { razorpayApiBase?: string; resendApiBase?: string } = {}
 ): Promise<Harness> {
   // mongodb-memory-server would download a mongod; if Homebrew already put one
   // on this machine, reuse it instead.
@@ -111,6 +111,17 @@ export async function startHarness(
           ? { RAZORPAY_API_BASE: options.razorpayApiBase }
           : {}),
         PLATFORM_OWNER_EMAILS: TEST_OWNER_EMAIL,
+        // Email. A key has to be present for sending to be attempted at all;
+        // the base points at a stub the suite runs, so what gets sent can be
+        // asserted on without a provider account.
+        ...(options.resendApiBase
+          ? {
+              RESEND_API_KEY: "re_test_harness",
+              RESEND_API_BASE: options.resendApiBase,
+              EMAIL_FROM: "TestManager <tests@harness.invalid>",
+              APP_URL: baseUrl,
+            }
+          : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     }

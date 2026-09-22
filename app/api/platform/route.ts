@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { SetupError } from "@/lib/errors";
 import { getPlatformOverview, requirePlatformOwner } from "@/lib/platform";
+import { auditConfig } from "@/lib/config-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,11 @@ export async function GET() {
     throw error;
   }
 
-  return NextResponse.json(await getPlatformOverview(), {
-    headers: { "cache-control": "no-store" },
-  });
+  // The config audit reports presence and shape, never values — see
+  // lib/config-audit.ts. It rides along here so a deployment can be checked
+  // from a script rather than by eye.
+  return NextResponse.json(
+    { ...(await getPlatformOverview()), config: auditConfig() },
+    { headers: { "cache-control": "no-store" } }
+  );
 }

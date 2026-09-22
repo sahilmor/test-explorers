@@ -8,6 +8,7 @@ import {
   requireRazorpayConfig,
   verifyCheckoutSignature,
 } from "@/lib/razorpay";
+import { reportAlert } from "@/lib/observability";
 import School from "@/models/School";
 
 /**
@@ -211,6 +212,11 @@ export async function completeCheckout(options: {
       config
     )
   ) {
+    await reportAlert("A checkout callback failed signature verification", {
+      where: "billing.verify",
+      extra: { schoolId: options.schoolId, orderId: options.orderId, paymentId: options.paymentId },
+    });
+
     await recordFailure({
       schoolId: options.schoolId,
       orderId: options.orderId,
@@ -241,6 +247,16 @@ export async function completeCheckout(options: {
   }
 
   if (payment.amount < ANNUAL_PLAN.amountPaise) {
+    await reportAlert("A payment cleared for less than the plan price", {
+      where: "billing.verify",
+      extra: {
+        schoolId: options.schoolId,
+        paymentId: options.paymentId,
+        paid: payment.amount,
+        expected: ANNUAL_PLAN.amountPaise,
+      },
+    });
+
     await recordFailure({
       schoolId: options.schoolId,
       orderId: options.orderId,

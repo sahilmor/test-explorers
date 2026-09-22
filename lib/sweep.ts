@@ -1,4 +1,6 @@
+import { after } from "next/server";
 import { sweepExpiredAttempts } from "@/lib/attempts";
+import { notifyResultsPublished } from "@/lib/notifications";
 
 /**
  * The opportunistic sweep.
@@ -12,6 +14,17 @@ import { sweepExpiredAttempts } from "@/lib/attempts";
  * rather than a job. It never blocks the caller's own work: a failure is
  * logged and swallowed, because the scheduled sweep and the per-request
  * deadline check both still cover the same ground.
+ *
+ * It also announces results for papers that have closed, for the same reason
+ * and on the same terms. Closing is a moment in time that nobody is present
+ * for, so something has to notice it, and the thing already noticing expired
+ * attempts is the obvious candidate. `notifyResultsPublished` throws nothing
+ * and claims each send with a unique index, so running it on every request is
+ * cheap and cannot double-send.
+ *
+ * That part runs in `after()`, so it happens once the response has already
+ * gone out. Nobody opening a dashboard should wait on an SMTP round trip for
+ * somebody else's result.
  */
 export async function sweepSchool(schoolId: string): Promise<void> {
   try {
@@ -25,5 +38,29 @@ export async function sweepSchool(schoolId: string): Promise<void> {
     // Deliberately swallowed. Whoever made this request wanted their own page,
     // not a sweep, and an expired attempt is force-submitted on access anyway.
     console.error("[sweep] opportunistic sweep failed:", error);
+  }
+
+  scheduleResultEmails(schoolId);
+}
+
+/**
+ * Queues the result emails for after the response.
+ *
+ * `after` needs a request scope. Everything that calls `sweepSchool` has one
+ * today, but a future caller might not — a script, a job — so the failure to
+ * schedule is caught and the work simply runs inline instead of throwing.
+ */
+function scheduleResultEmails(schoolId: string) {
+  const run = async () => {
+    const mailed = await notifyResultsPublished(schoolId);
+    if (mailed.sent > 0) {
+      console.log(`[sweep] emailed ${mailed.sent} result(s) for school ${schoolId}`);
+    }
+  };
+
+  try {
+    after(run);
+  } catch {
+    void run();
   }
 }

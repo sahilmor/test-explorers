@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
 import { deleteTest, getTest, updateTest } from "@/lib/tests";
+import { notifyTestAssigned } from "@/lib/notifications";
 import { fieldErrors, objectIdSchema, testSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,10 @@ export const PATCH = withAuth<Ctx>(
 
     try {
       const test = await updateTest(auth.schoolId, id, parsed.data);
+
+      // An edit can publish a draft, which is the moment a class first has
+      // something to be told about. Anyone already told is not told again.
+      if (test.state !== "draft") announce(auth.schoolId, id);
       return NextResponse.json({ test });
     } catch (error) {
       if (error instanceof SetupError) {
@@ -96,3 +101,22 @@ export const DELETE = withAuth<Ctx>(
   },
   { roles: AUTHORS }
 );
+
+/**
+ * Mails the class once the response has gone out. See the note on the same
+ * helper in app/api/tests/route.ts.
+ */
+function announce(schoolId: string, testId: string) {
+  const run = async () => {
+    const summary = await notifyTestAssigned(schoolId, testId);
+    if (summary.sent > 0) {
+      console.log(`[notify] told ${summary.sent} student(s) about test ${testId}`);
+    }
+  };
+
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}

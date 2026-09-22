@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyVerifiedPayment, recordFailure } from "@/lib/billing";
 import { razorpayConfig, verifyWebhookSignature } from "@/lib/razorpay";
+import { reportAlert, reportError } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 // node:crypto signs the comparison, and the raw body has to survive intact.
@@ -23,7 +24,11 @@ export async function POST(request: Request) {
   const config = razorpayConfig();
 
   if (!config?.webhookSecret) {
-    console.error("[/api/billing/webhook] no RAZORPAY_WEBHOOK_SECRET set");
+    // Worth an alert, not just a log: if this is production, money is moving
+    // and nothing is being recorded against it.
+    await reportAlert("Razorpay webhook arrived with no RAZORPAY_WEBHOOK_SECRET set", {
+      where: "billing.webhook",
+    });
     return NextResponse.json({ error: "Webhooks aren't configured." }, { status: 501 });
   }
 
@@ -33,7 +38,12 @@ export async function POST(request: Request) {
   const signature = request.headers.get("x-razorpay-signature");
 
   if (!signature || !verifyWebhookSignature(raw, signature, config.webhookSecret)) {
-    console.warn("[/api/billing/webhook] rejected an unsigned or mis-signed delivery");
+    // Either the secret drifted from the dashboard, or somebody is posting
+    // made-up payments at the endpoint. Both are worth knowing about tonight.
+    await reportAlert("Razorpay webhook failed signature verification", {
+      where: "billing.webhook",
+      extra: { hasSignature: Boolean(signature) },
+    });
     return NextResponse.json({ error: "Bad signature." }, { status: 400 });
   }
 
@@ -83,6 +93,16 @@ export async function POST(request: Request) {
     }
 
     if (event.event === "payment.failed") {
+      await reportAlert("A Razorpay payment failed", {
+        where: "billing.payment_failed",
+        level: "warning",
+        extra: {
+          orderId: payment.order_id,
+          paymentId: payment.id,
+          reason: payment.error_description ?? null,
+        },
+      });
+
       await recordFailure({
         orderId: payment.order_id,
         paymentId: payment.id,
@@ -95,8 +115,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ignored: event.event ?? "unknown" });
   } catch (error) {
     // A 500 here asks Razorpay to deliver it again, which is what we want if
-    // the database was briefly unreachable.
-    console.error("[/api/billing/webhook] failed to apply:", error);
+    // the database was briefly unreachable. It is also the worst kind of
+    // failure in this app — a verified payment we could not record — so it
+    // goes straight to the alerting.
+    await reportError(error, {
+      where: "billing.webhook",
+      extra: { event: event.event, orderId: payment.order_id, paymentId: payment.id },
+    });
     return NextResponse.json({ error: "Could not apply that event." }, { status: 500 });
   }
 }

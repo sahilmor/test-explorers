@@ -278,7 +278,9 @@ export function TestsScreen({
                 <div className="flex justify-end gap-1">
                   <Link
                     href={`/teacher/tests/${row.id}/results`}
-                    className="rounded-md border-2 border-transparent px-2 py-1 font-display text-xs font-bold tracking-tight text-cobalt transition-colors hover:border-cobalt hover:bg-cobalt-wash focus-visible:border-ink focus-visible:outline-none"
+                    // Matches RowAction: a thumb-sized target on a phone,
+                    // compact again once there is a mouse.
+                    className="inline-flex min-h-11 items-center rounded-md border-2 border-transparent px-2.5 font-display text-xs font-bold tracking-tight text-cobalt transition-colors hover:border-cobalt hover:bg-cobalt-wash focus-visible:border-ink focus-visible:outline-none sm:min-h-0 sm:py-1"
                   >
                     Results
                   </Link>

@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
 import { setupErrorResponse } from "@/lib/api-response";
 import { createTest, listTests } from "@/lib/tests";
+import { notifyTestAssigned } from "@/lib/notifications";
 import { sweepSchool } from "@/lib/sweep";
 import { fieldErrors, testSchema } from "@/lib/validation";
 
@@ -38,6 +39,10 @@ export const POST = withAuth(
 
     try {
       const test = await createTest(auth.schoolId, auth.userId, parsed.data);
+
+      // A draft is not assigned to anyone, so there is nobody to tell yet.
+      // notifyTestAssigned re-checks that itself; this just avoids the call.
+      if (test.state !== "draft") announce(auth.schoolId, test.id);
       return NextResponse.json({ test }, { status: 201 });
     } catch (error) {
       if (error instanceof SetupError) {
@@ -49,3 +54,26 @@ export const POST = withAuth(
   },
   { roles: AUTHORS }
 );
+
+/**
+ * Mails the class once the response has gone out.
+ *
+ * Deliberately not inside `createTest`/`setAssignments`: those are the things
+ * that must succeed, and an email has no business sitting in their path. If
+ * the scheduling itself is unavailable the send runs inline, and
+ * `notifyTestAssigned` throws nothing either way.
+ */
+function announce(schoolId: string, testId: string) {
+  const run = async () => {
+    const summary = await notifyTestAssigned(schoolId, testId);
+    if (summary.sent > 0) {
+      console.log(`[notify] told ${summary.sent} student(s) about test ${testId}`);
+    }
+  };
+
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}

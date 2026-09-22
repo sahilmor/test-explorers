@@ -247,16 +247,21 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
     <div className="min-h-dvh bg-paper">
       {/* ---- the bar that never moves ---- */}
       <header className="sticky top-0 z-30 border-b-2 border-ink bg-paper-pure">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-          <div className="min-w-0 flex-1">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-6">
+          {/* On a phone the title takes its own line. Squeezing it next to the
+              clock and the save indicator left it reading "Unit …", which
+              tells a student nothing about which paper they are sitting. */}
+          <div className="min-w-0 w-full sm:w-auto sm:flex-1">
             <p className="eyebrow text-ink-soft">{test.subjectName}</p>
             <h1 className="truncate font-display text-base font-bold text-ink">
               {test.title}
             </h1>
           </div>
 
-          <SaveIndicator status={autosave.status} lastSavedAt={autosave.lastSavedAt} />
-          <Countdown msLeft={msLeft} />
+          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+            <SaveIndicator status={autosave.status} lastSavedAt={autosave.lastSavedAt} />
+            <Countdown msLeft={msLeft} />
+          </div>
         </div>
       </header>
 

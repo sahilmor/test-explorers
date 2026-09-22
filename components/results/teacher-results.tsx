@@ -275,7 +275,9 @@ function SortableTh({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1 hover:underline"
+        // min-h on touch: as a bare line of text this was an 18px-tall
+        // target, which is a lot to ask of a thumb.
+        className="inline-flex min-h-11 items-center gap-1 hover:underline sm:min-h-0"
       >
         {label}
         {active ? (

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Instrument_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 
 // Display face: a grotesque with actual personality. Variable width + optical
 // size axes let headlines run tight and heavy without a second file.
@@ -26,12 +27,38 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // An absolute base, so every relative canonical and OG url below resolves
+  // to something a crawler can actually follow.
+  metadataBase: new URL(siteUrl()),
   title: {
-    default: "School Online Test Manager",
-    template: "%s · School Online Test Manager",
+    default: `${SITE_NAME} — run your school's tests online`,
+    template: `%s · ${SITE_NAME}`,
   },
-  description:
-    "Run your school's tests online instead of on paper. Set them, sit them, mark them.",
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    "school test software",
+    "online assessment for schools",
+    "school exam platform",
+    "question bank",
+    "unit test software",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} — run your school's tests online`,
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — run your school's tests online`,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {

@@ -266,6 +266,88 @@ signed-out visitors, so the route never advertises itself.
 
 ---
 
+## Part 5 — Email (Resend)
+
+Optional. Without it the app runs exactly as before: assignments and results
+still work, and the app logs what it would have sent rather than failing
+anything. A broken mail provider is never allowed to break a test assignment.
+
+1. Sign up at [resend.com](https://resend.com). The free tier is generous and
+   no card is needed.
+2. **API Keys → Create API Key.** Give it *Sending access*. Copy it now — like
+   most providers, it is shown once.
+3. Put it in `.env.local`:
+
+```
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
+```
+
+4. **Send a real one.** With no verified domain, Resend accepts
+   `onboarding@resend.dev` as a sender but will only deliver to *your own
+   account address*. That is enough to prove the whole path works: sign up a
+   school using your own email as the admin, add yourself as a student, and
+   publish a paper to your section.
+
+5. **For real students**, verify a domain: **Domains → Add Domain**, add the
+   DNS records it gives you, wait for verification, then set
+
+```
+EMAIL_FROM="TestManager <tests@yourschooldomain.com>"
+```
+
+Until you do, mail to anyone other than you will be rejected by Resend, and
+the notification row will record the failure rather than pretending it worked.
+
+### What gets sent
+
+Two things, and nothing else. There is no marketing email and nothing to
+unsubscribe from.
+
+| When | To | Contains |
+| --- | --- | --- |
+| A paper is published or assigned to a class | Every student in that class | Title, subject, question count, duration, opens/closes times |
+| A paper's window closes | Every student who sat it | Their score, and a link to the full review |
+
+Each is sent **once per person per paper**, enforced by a unique index rather
+than by a check in code — see `models/Notification.ts`. Reassigning a paper to
+a class that already has it emails nobody; adding a new class emails only the
+new one.
+
+---
+
+## Part 6 — Error tracking (Sentry)
+
+Also optional, and completely inert without a DSN — no network calls, nothing
+to uninstall.
+
+1. Sign up at [sentry.io](https://sentry.io) and create a project of type
+   **Next.js**.
+2. Copy the DSN it shows you.
+3. Put it in `.env.local` **twice** — the server and the browser read
+   different variables:
+
+```
+SENTRY_DSN=https://...ingest.sentry.io/...
+NEXT_PUBLIC_SENTRY_DSN=https://...ingest.sentry.io/...
+```
+
+A DSN is a write-only endpoint, not a secret; the browser half has to be
+public to work at all.
+
+4. Add both to Vercel and redeploy.
+
+Beyond unhandled exceptions, two things raise an explicit alert because you
+want to know about them before a customer tells you:
+
+- a Razorpay webhook that fails signature verification, or arrives with no
+  webhook secret configured;
+- a payment that fails, is declined, or clears for less than the plan price.
+
+Tracing is set to zero on purpose — on a free tier, sampled traces eat the
+quota the errors need.
+
+---
+
 ## Cleaning up later
 
 `models/Ping.ts` and `app/api/ping/route.ts` exist only to prove the plumbing

@@ -6,6 +6,7 @@ import { Stat } from "@/components/results/result-bits";
 import { SetupError } from "@/lib/errors";
 import { formatPaise } from "@/lib/plans";
 import { getPlatformOverview, requirePlatformOwner } from "@/lib/platform";
+import { auditConfig, type ConfigCheck } from "@/lib/config-audit";
 
 export const metadata: Metadata = { title: "Platform" };
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function PlatformPage() {
   }
 
   const { schools, totals } = await getPlatformOverview();
+  const config = auditConfig();
 
   return (
     <div className="min-h-dvh bg-ink px-5 py-10 text-paper sm:px-8 sm:py-14">
@@ -65,6 +67,26 @@ export default async function PlatformPage() {
             value={totals.students}
             hint="across every school"
           />
+        </section>
+
+        {/* ---- is this deployment actually wired up? ---- */}
+        <section>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-display text-xl font-bold tracking-tight text-paper">
+              Configuration
+            </h2>
+            <p className="text-sm text-paper/55">
+              {config.environment} · {config.summary.ok} ok
+              {config.summary.warn > 0 ? `, ${config.summary.warn} to look at` : ""}
+              {config.summary.missing > 0 ? `, ${config.summary.missing} missing` : ""}
+            </p>
+          </div>
+
+          <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            {config.checks.map((check) => (
+              <ConfigRow key={check.key} check={check} />
+            ))}
+          </ul>
         </section>
 
         <section>
@@ -142,5 +164,40 @@ export default async function PlatformPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+/**
+ * One configuration check.
+ *
+ * Deliberately not a red/green light: "warn" is the common and interesting
+ * state — email not set up yet, test keys still in place — and it needs to
+ * read as something to decide about rather than something broken.
+ */
+function ConfigRow({ check }: { check: ConfigCheck }) {
+  const tone =
+    check.status === "ok"
+      ? "border-lime/40 bg-lime/10"
+      : check.status === "warn"
+        ? "border-[#FFC93D]/45 bg-[#FFC93D]/10"
+        : "border-coral/50 bg-coral/10";
+
+  const dot =
+    check.status === "ok" ? "bg-lime" : check.status === "warn" ? "bg-[#FFC93D]" : "bg-coral";
+
+  return (
+    <li className={`rounded-xl border-2 px-4 py-3 ${tone}`}>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${dot}`} />
+        <p className="font-display text-sm font-bold text-paper">{check.label}</p>
+        {check.required && check.status !== "ok" ? (
+          <span className="ml-auto rounded-full border border-coral px-2 py-0.5 font-display text-[0.65rem] font-bold text-coral">
+            blocking
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-paper/65">{check.detail}</p>
+      <p className="mt-1 font-mono text-[0.65rem] text-paper/35">{check.key}</p>
+    </li>
   );
 }

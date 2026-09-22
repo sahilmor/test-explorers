@@ -169,7 +169,14 @@ export function SuccessNote({
   );
 }
 
-/** Small ghost action used inside table rows. */
+/**
+ * Small ghost action used inside table rows.
+ *
+ * Roomier on a phone than on a desktop, deliberately. At the compact desktop
+ * size these came out 28px tall, which is fine for a mouse and a poor target
+ * for a thumb — and "Delete" sitting two millimetres from "Edit" is the worst
+ * place to make someone aim.
+ */
 export function RowAction({
   children,
   onClick,
@@ -184,7 +191,7 @@ export function RowAction({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-md border-2 border-transparent px-2 py-1 font-display text-xs font-bold tracking-tight transition-colors",
+        "inline-flex min-h-11 items-center rounded-md border-2 border-transparent px-2.5 font-display text-xs font-bold tracking-tight transition-colors sm:min-h-0 sm:py-1",
         "focus-visible:border-ink focus-visible:outline-none",
         tone === "danger"
           ? "text-danger hover:border-danger hover:bg-danger-wash"

@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
 import { setAssignments } from "@/lib/tests";
+import { notifyTestAssigned } from "@/lib/notifications";
 import { assignmentSchema, fieldErrors, objectIdSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,10 @@ export const PUT = withAuth<Ctx>(
 
     try {
       const test = await setAssignments(auth.schoolId, id, parsed.data.sectionIds);
+
+      // Students already told about this paper are not told again — the
+      // claim is per student, so only a newly added section hears about it.
+      announce(auth.schoolId, id);
       return NextResponse.json({ test });
     } catch (error) {
       if (error instanceof SetupError) {
@@ -56,3 +61,26 @@ export const PUT = withAuth<Ctx>(
   },
   { roles: ["teacher", "admin"] }
 );
+
+/**
+ * Mails the class once the response has gone out.
+ *
+ * Deliberately not inside `createTest`/`setAssignments`: those are the things
+ * that must succeed, and an email has no business sitting in their path. If
+ * the scheduling itself is unavailable the send runs inline, and
+ * `notifyTestAssigned` throws nothing either way.
+ */
+function announce(schoolId: string, testId: string) {
+  const run = async () => {
+    const summary = await notifyTestAssigned(schoolId, testId);
+    if (summary.sent > 0) {
+      console.log(`[notify] told ${summary.sent} student(s) about test ${testId}`);
+    }
+  };
+
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
