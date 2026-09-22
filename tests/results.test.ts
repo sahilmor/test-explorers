@@ -545,6 +545,32 @@ describe("the teacher's results view", () => {
     await sit(s2.client, testId, { correct: 4, wrong: 1 });
     await sit(s3.client, testId, { correct: 2, wrong: 3 });
     await sit(s4.client, testId, { correct: 1, wrong: 4 });
+
+    // Every assertion below is about a closed paper, because that is the only
+    // state in which this screen shows anything at all. The case above proves
+    // the refusal while it was open.
+    await closeTest(testId);
+  });
+
+  it("refuses a teacher while the paper is still open", async () => {
+    const openId = await makeTest("Still being sat", { questionCount: 5 });
+    const { client } = await makeStudent("Early Finisher", "early@riverbend.test");
+    await sit(client, openId, { correct: 5 });
+
+    const res = await teacher.get(`/api/tests/${openId}/results`);
+
+    expect(res.status).toBe(403);
+    // Not a single mark, and not the answer key either.
+    expect(JSON.stringify(res.body)).not.toContain("correctOptionIndex");
+    expect(JSON.stringify(res.body)).not.toContain("accuracy");
+
+    // The marks exist all the same — they were worked out at submission. They
+    // are simply not being handed out.
+    const attempt = await db()
+      .collection("attempts")
+      .findOne({ testId: new ObjectId(openId) });
+    expect(attempt?.score).toBe(5);
+    expect(attempt?.gradedAt).toBeInstanceOf(Date);
   });
 
   it("summarises submissions against the whole roster", async () => {
@@ -613,6 +639,7 @@ describe("the teacher's results view", () => {
 
   it("shows a clean empty state for a test nobody has sat", async () => {
     const emptyId = await makeTest("Nobody sat this");
+    await closeTest(emptyId);
     const res = await teacher.get(`/api/tests/${emptyId}/results`);
 
     expect(res.status).toBe(200);

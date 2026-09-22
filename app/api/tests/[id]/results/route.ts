@@ -12,10 +12,10 @@ type Ctx = { params: Promise<{ id: string }> };
 /**
  * The class's results for one test.
  *
- * Unlike a student's own result this is not withheld until the window closes —
- * a teacher watching a sitting is supposed to see who has handed in. What they
- * get before the window shuts is simply incomplete, and the payload says so
- * with `test.state`.
+ * Behind the same gate as a student's own result: 403 until the window has
+ * closed for everyone. A teacher is not exempt — sections often sit the same
+ * paper at different times, and a mark read out early is a mark that can be
+ * passed on.
  */
 export const GET = withAuth<Ctx>(
   async (_request, auth, context) => {

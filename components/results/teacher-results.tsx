@@ -63,11 +63,7 @@ export function TeacherResultsScreen({ results }: { results: TeacherResults }) {
       <AdminHeader
         eyebrow={results.test.subjectName ?? "Results"}
         title={results.test.title}
-        blurb={`${results.test.totalQuestions} questions · ${results.test.durationMinutes} minutes · ${
-          results.test.state === "open"
-            ? "still open, so these numbers will keep moving"
-            : "closed"
-        }`}
+        blurb={`${results.test.totalQuestions} questions · ${results.test.durationMinutes} minutes · closed`}
         action={
           <Button
             variant="outline"

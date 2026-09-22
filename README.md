@@ -134,7 +134,7 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. 233 cases covering tenant isolation, the whole school-setup flow,
+bypasses. 234 cases covering tenant isolation, the whole school-setup flow,
 CSV parsing, the question bank, papers and their windows, sitting a paper, and
 marking and results. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
 each case covers and how to confirm the tests actually have teeth.
@@ -293,6 +293,11 @@ already graded in the database while the API is still refusing to show them.
 **The student's screen** leads with the score, then correct / wrong / blank,
 then rank within their own section, then the paper itself with their answer and
 the right one side by side. Right and wrong are labelled as well as coloured.
+
+The gate covers the teacher too. While a paper is open their results screen
+says when it unlocks and nothing else — sections often sit the same paper at
+different times, and a mark read out early is a mark that can be passed on.
+Watching a sitting in progress is a different question and a different screen.
 
 **The teacher's screen** at `/teacher/tests/[id]/results` opens with the
 distribution and then the thing worth reading — every question sorted worst

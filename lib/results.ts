@@ -302,6 +302,40 @@ const BUCKETS = [
   { label: "91–100", from: 91, to: 100 },
 ];
 
+/**
+ * Whether a paper's class results may be opened yet, without throwing — so
+ * the screen can say when they unlock instead of showing an error.
+ */
+export async function teacherResultsAvailability(
+  schoolId: string,
+  testId: string,
+  now: Date = new Date()
+): Promise<
+  | { available: true }
+  | { available: false; found: false }
+  | { available: false; found: true; title: string; subjectName: string | null; closesAt: Date }
+> {
+  await connectToDatabase();
+
+  const test = await Test.findOne({ _id: testId, schoolId })
+    .select("title subjectId closesAt")
+    .lean();
+  if (!test) return { available: false, found: false };
+  if (resultsAreOut(test.closesAt, now)) return { available: true };
+
+  const subject = await Subject.findOne({ _id: test.subjectId, schoolId })
+    .select("name")
+    .lean();
+
+  return {
+    available: false,
+    found: true,
+    title: test.title,
+    subjectName: subject?.name ?? null,
+    closesAt: test.closesAt,
+  };
+}
+
 export async function getTeacherResults(
   schoolId: string,
   testId: string,
@@ -311,6 +345,14 @@ export async function getTeacherResults(
 
   const test = await Test.findOne({ _id: testId, schoolId }).lean();
   if (!test) throw new SetupError("No such test.", 404);
+
+  // The same gate as a student's own result. A teacher can already read the
+  // answer key out of the question bank, but this screen also carries live
+  // per-student marks, and a paper is often sat by one section before another —
+  // so it stays sealed for everyone until the window shuts. Watching a sitting
+  // in progress is a different screen and a different question: who has
+  // started, who has handed in. Not what they scored.
+  assertResultsVisible(test.closesAt, now);
 
   const [subject, assignments, attempts, questionDocs] = await Promise.all([
     Subject.findOne({ _id: test.subjectId, schoolId }).select("name").lean(),

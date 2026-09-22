@@ -313,6 +313,13 @@ calls it before returning anything: the student's own result, the answer key,
 the teacher's class analysis and the leaderboard. It throws a 403 with the same
 message the UI shows.
 
+A teacher is not exempt. It is tempting to let them watch marks land, but the
+same paper is often sat by one section before another, and a mark read out
+early is a mark that can be passed on. Watching a sitting in progress — who
+has started, who has handed in — is a different question and a different
+screen. What the teacher gets before the window shuts is a page saying when
+results unlock.
+
 It lives beside the query rather than in the page, so a student who types the
 URL of their own result while the paper is still open is refused by the same
 line of code that would have hidden the link. The mark is already in the
@@ -353,7 +360,8 @@ if (chosen === null || chosen === undefined) { incorrectCount++; continue; }
 function assertResultsVisible() { /* nothing */ }
 ```
 
-Then `npm test`. Nine cases go red: the marking counts, the unanswered
-handling, the recompute-safety check, and every case asserting that an open
-paper's result, answer key, class analysis and leaderboard are refused.
-Verified when it was written.
+Then `npm test`. Ten cases go red: the marking on all three submit paths, the
+unanswered handling, the recompute-safety check, and every case asserting that
+an open paper's result, answer key and class analysis are refused — including
+the one that reads the attempts straight out of MongoDB to show they were
+graded all along. Verified when it was written.
