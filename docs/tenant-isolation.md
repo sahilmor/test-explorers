@@ -298,3 +298,62 @@ Then `npm test`. Thirteen cases go red, including every one that reads an
 answer back out of MongoDB, both auto-submit paths and the sweep. An autosave
 that returns 200 and writes nothing cannot survive this suite. Verified when it
 was written.
+
+
+## Phase 6: marking and results
+
+Results add a second axis to guard. Everything before this was "whose data is
+it"; a result is also "may this be seen *yet*".
+
+### The gate is one function, in the data layer
+
+`assertResultsVisible` in [`lib/results.ts`](../lib/results.ts) answers a single
+question — is `now >= test.closesAt`? — and every path that could reveal a mark
+calls it before returning anything: the student's own result, the answer key,
+the teacher's class analysis and the leaderboard. It throws a 403 with the same
+message the UI shows.
+
+It lives beside the query rather than in the page, so a student who types the
+URL of their own result while the paper is still open is refused by the same
+line of code that would have hidden the link. The mark is already in the
+database at that point — it was written at submission — it is simply not handed
+out.
+
+A test asserts both halves at once: it reads the attempts straight out of
+MongoDB, confirms every one carries a score, and *then* confirms the API still
+answers 403. A gate that worked by not computing the mark would pass the second
+check and fail the first.
+
+### The leaderboard has no parameter to ask with
+
+`GET /api/student/leaderboard` takes nothing. The section comes from the
+student's own user record, loaded via the token, and the query filters on
+`{ schoolId, sectionId }` together. There is no id to swap for another class's,
+in the same way `/api/student/tests` has none.
+
+Closed papers are the only ones it counts, so it cannot become a side channel
+for a paper that is still open.
+
+### A sat paper freezes
+
+Once any attempt exists for a test, changing its `questionIds` or `subjectId`
+is refused with a 409. Those attempts were marked against the paper as it
+stood, and silently swapping questions underneath them would make every stored
+mark a lie about a paper nobody sat.
+
+### Confirming these tests have teeth too
+
+Two sabotages, applied together:
+
+```ts
+// lib/grading.ts — sabotage 1: blank counts as wrong
+if (chosen === null || chosen === undefined) { incorrectCount++; continue; }
+
+// lib/results.ts — sabotage 2: no gate
+function assertResultsVisible() { /* nothing */ }
+```
+
+Then `npm test`. Nine cases go red: the marking counts, the unanswered
+handling, the recompute-safety check, and every case asserting that an open
+paper's result, answer key, class analysis and leaderboard are refused.
+Verified when it was written.

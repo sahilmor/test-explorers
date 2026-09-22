@@ -84,6 +84,22 @@ const attemptSchema = new Schema(
 
     /** When the last autosave actually landed. Shown back to the student. */
     lastSavedAt: { type: Date, required: false, default: null },
+
+    // --- the mark ---------------------------------------------------------
+    //
+    // Computed once, as part of the same call that sets a submitted status,
+    // and stored here so no screen ever has to recompute it. All four counts
+    // are absolute values written with $set, which is what makes re-grading
+    // an already-graded attempt a no-op rather than a double count.
+    //
+    // `score` is the number of correct answers; the percentage is derived from
+    // score/totalQuestions wherever it is shown.
+    score: { type: Number, required: false, default: null },
+    totalQuestions: { type: Number, required: false, default: null },
+    correctCount: { type: Number, required: false, default: null },
+    incorrectCount: { type: Number, required: false, default: null },
+    unansweredCount: { type: Number, required: false, default: null },
+    gradedAt: { type: Date, required: false, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );
@@ -96,8 +112,11 @@ attemptSchema.index({ testId: 1, studentId: 1 }, { unique: true });
 // The sweep's query: everything still running, oldest first.
 attemptSchema.index({ status: 1, startedAt: 1 });
 
-// A teacher's future "who has submitted?" view.
+// The teacher's results view: this test's attempts, best first.
 attemptSchema.index({ schoolId: 1, testId: 1, status: 1 });
+
+// The leaderboard: everything a section has submitted, across tests.
+attemptSchema.index({ schoolId: 1, sectionId: 1, status: 1 });
 
 export type AttemptDoc = InferSchemaType<typeof attemptSchema>;
 

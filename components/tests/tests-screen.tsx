@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
@@ -266,6 +267,12 @@ export function TestsScreen({
               </Td>
               <Td className="text-right align-top">
                 <div className="flex justify-end gap-1">
+                  <Link
+                    href={`/teacher/tests/${row.id}/results`}
+                    className="rounded-md border-2 border-transparent px-2 py-1 font-display text-xs font-bold tracking-tight text-cobalt transition-colors hover:border-cobalt hover:bg-cobalt-wash focus-visible:border-ink focus-visible:outline-none"
+                  >
+                    Results
+                  </Link>
                   <RowAction onClick={() => void openForEdit(row)}>Edit</RowAction>
                   <RowAction
                     onClick={() => {

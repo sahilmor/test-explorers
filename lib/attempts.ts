@@ -8,6 +8,7 @@ import Test from "@/models/Test";
 import TestAssignment from "@/models/TestAssignment";
 import User from "@/models/User";
 import { attemptDeadline, type AttemptStatus } from "@/lib/attempts-shared";
+import { finishAttempt } from "@/lib/grading";
 
 /**
  * Sitting a test.
@@ -68,17 +69,30 @@ export type SittingState = {
  * record a submission three hours after the fact.
  */
 async function enforceDeadline(
-  attempt: { _id: mongoose.Types.ObjectId; status: string },
+  attempt: {
+    _id: mongoose.Types.ObjectId;
+    status: string;
+    schoolId: mongoose.Types.ObjectId;
+    responses?: unknown[];
+  },
+  test: { questionIds?: mongoose.Types.ObjectId[] },
   deadline: Date,
   now: Date
 ): Promise<AttemptStatus> {
   if (attempt.status !== "in_progress") return attempt.status as AttemptStatus;
   if (now < deadline) return "in_progress";
 
-  await Attempt.updateOne(
-    { _id: attempt._id, status: "in_progress" },
-    { $set: { status: "auto_submitted", submittedAt: deadline } }
-  );
+  // Marked in the same call that closes it, so "submitted but never graded"
+  // is not a state this app can produce.
+  await finishAttempt({
+    attemptId: attempt._id,
+    schoolId: attempt.schoolId,
+    questionIds: test.questionIds ?? [],
+    responses: (attempt.responses ?? []) as never[],
+    status: "auto_submitted",
+    submittedAt: deadline,
+    now,
+  });
 
   return "auto_submitted";
 }
@@ -221,8 +235,9 @@ export async function getAttemptState(
   );
 
   // Every read is also a deadline check, so simply opening the page after the
-  // time has run out submits the attempt rather than showing a live paper.
-  const status = await enforceDeadline(attempt, deadline, now);
+  // time has run out submits — and marks — the attempt rather than showing a
+  // live paper.
+  const status = await enforceDeadline(attempt, test, deadline, now);
 
   const [questions, subject] = await Promise.all([
     sittingQuestions(schoolId, test.questionIds ?? []),
@@ -314,7 +329,7 @@ export async function saveResponses(
   }
 
   if (now >= deadline) {
-    await enforceDeadline(attempt, deadline, now);
+    await enforceDeadline(attempt, test, deadline, now);
     return {
       status: "auto_submitted",
       lastSavedAt: (attempt.lastSavedAt ?? attempt.startedAt).toISOString(),
@@ -423,10 +438,16 @@ export async function submitAttempt(
   const submittedAt = expired ? deadline : now;
   const status: AttemptStatus = expired ? "auto_submitted" : "submitted";
 
-  await Attempt.updateOne(
-    { _id: attempt._id, status: "in_progress" },
-    { $set: { status, submittedAt } }
-  );
+  // Same call, so a student never sees "submitted" without a mark behind it.
+  await finishAttempt({
+    attemptId: attempt._id,
+    schoolId: attempt.schoolId,
+    questionIds: test.questionIds ?? [],
+    responses: attempt.responses ?? [],
+    status,
+    submittedAt,
+    now,
+  });
 
   return { status, submittedAt: submittedAt.toISOString(), answered, total };
 }
@@ -465,7 +486,8 @@ export async function sweepExpiredAttempts(
   if (options.schoolId) filter.schoolId = options.schoolId;
 
   const running = await Attempt.find(filter)
-    .select("testId startedAt schoolId")
+    // responses come along because the sweep marks as it closes.
+    .select("testId startedAt schoolId responses")
     .sort({ startedAt: 1 })
     .limit(limit)
     .lean();
@@ -478,21 +500,27 @@ export async function sweepExpiredAttempts(
   const tests = await Test.find({
     _id: { $in: [...new Set(running.map((a) => String(a.testId)))] },
   })
-    .select("durationMinutes closesAt")
+    .select("durationMinutes closesAt questionIds")
     .lean();
 
   const testById = new Map(tests.map((t) => [String(t._id), t]));
 
-  const expired: mongoose.Types.ObjectId[] = [];
-  const deadlines = new Map<string, Date>();
+  type Expired = {
+    attempt: (typeof running)[number];
+    deadline: Date;
+    questionIds: mongoose.Types.ObjectId[];
+  };
+
+  const expired: Expired[] = [];
 
   for (const attempt of running) {
     const test = testById.get(String(attempt.testId));
+
     // A test deleted out from under a live attempt: close the attempt rather
-    // than leaving it running forever.
+    // than leaving it running forever. With no paper left there is nothing to
+    // mark it against, so it grades as zero out of zero.
     if (!test) {
-      expired.push(attempt._id);
-      deadlines.set(String(attempt._id), attempt.startedAt);
+      expired.push({ attempt, deadline: attempt.startedAt, questionIds: [] });
       continue;
     }
 
@@ -503,8 +531,7 @@ export async function sweepExpiredAttempts(
     );
 
     if (now >= deadline) {
-      expired.push(attempt._id);
-      deadlines.set(String(attempt._id), deadline);
+      expired.push({ attempt, deadline, questionIds: test.questionIds ?? [] });
     }
   }
 
@@ -513,24 +540,25 @@ export async function sweepExpiredAttempts(
   }
 
   // Each attempt gets its own deadline as its submittedAt, so a sweep that
-  // runs late still records when the time actually ran out.
+  // runs late still records when the time actually ran out — and each is
+  // marked in the same update that closes it.
   await Promise.all(
-    expired.map((id) =>
-      Attempt.updateOne(
-        { _id: id, status: "in_progress" },
-        {
-          $set: {
-            status: "auto_submitted",
-            submittedAt: deadlines.get(String(id)) ?? now,
-          },
-        }
-      )
+    expired.map((e) =>
+      finishAttempt({
+        attemptId: e.attempt._id,
+        schoolId: e.attempt.schoolId,
+        questionIds: e.questionIds,
+        responses: e.attempt.responses ?? [],
+        status: "auto_submitted",
+        submittedAt: e.deadline,
+        now,
+      })
     )
   );
 
   return {
     checked: running.length,
     submitted: expired.length,
-    attemptIds: expired.map(String),
+    attemptIds: expired.map((e) => String(e.attempt._id)),
   };
 }

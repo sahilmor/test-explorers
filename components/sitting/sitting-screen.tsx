@@ -229,7 +229,15 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
   }, [doSubmit]);
 
   if (finished) {
-    return <Submitted title={test.title} counts={counts} total={questions.length} />;
+    return (
+      <Submitted
+        title={test.title}
+        counts={counts}
+        total={questions.length}
+        testId={test.id}
+        closesAt={new Date(test.closesAt)}
+      />
+    );
   }
 
   const question = questions[index];
@@ -500,11 +508,19 @@ function Submitted({
   title,
   counts,
   total,
+  testId,
+  closesAt,
 }: {
   title: string;
   counts: { answered: number; unanswered: number };
   total: number;
+  testId: string;
+  closesAt: Date;
 }) {
+  // The mark exists already — it is worked out as part of submitting — but it
+  // stays out of sight until the paper has closed for everyone.
+  const resultsOut = new Date() >= closesAt;
+
   return (
     <div className="grid min-h-dvh place-items-center bg-paper px-5 py-16">
       <div className="w-full max-w-md rounded-xl border-2 border-ink bg-paper-pure p-8 text-center shadow-[5px_5px_0_var(--ink)]">
@@ -529,10 +545,17 @@ function Submitted({
         </p>
 
         <p className="mt-4 text-xs text-ink-soft">
-          Marks appear here once your teacher releases them.
+          {resultsOut
+            ? "Your mark is ready."
+            : "Your mark appears once this test closes for everyone."}
         </p>
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {resultsOut ? (
+            <Button
+              render={<Link href={`/student/tests/${testId}/result`}>See your result</Link>}
+            />
+          ) : null}
           <Button variant="outline" render={<Link href="/student">Back to my tests</Link>} />
         </div>
       </div>

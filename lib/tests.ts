@@ -7,6 +7,7 @@ import Subject from "@/models/Subject";
 import Test from "@/models/Test";
 import TestAssignment from "@/models/TestAssignment";
 import User from "@/models/User";
+import Attempt from "@/models/Attempt";
 import { testState, type TestState, type TestStatus } from "@/lib/tests-shared";
 import type { Difficulty } from "@/lib/questions-shared";
 
@@ -246,8 +247,37 @@ export async function updateTest(
 ) {
   await connectToDatabase();
 
-  const existing = await Test.findOne({ _id: id, schoolId }).select("_id").lean();
+  const existing = await Test.findOne({ _id: id, schoolId })
+    .select("_id questionIds subjectId")
+    .lean();
   if (!existing) throw new SetupError("No such test.", 404);
+
+  /*
+   * Once anyone has sat this paper, its question list is frozen.
+   *
+   * Marks are computed against `questionIds`, so swapping a question after a
+   * student has answered would silently change what they were marked on —
+   * and two students sitting "the same" test would have sat different papers.
+   * Everything else about the test stays editable.
+   */
+  const sat = await Attempt.countDocuments({ schoolId, testId: id });
+  if (sat > 0) {
+    const before = (existing.questionIds ?? []).map(String);
+    const after = [...new Set(input.questionIds)];
+    const changed =
+      before.length !== after.length ||
+      before.some((q, i) => q !== after[i]) ||
+      String(existing.subjectId) !== input.subjectId;
+
+    if (changed) {
+      throw new SetupError(
+        `${sat} student${sat === 1 ? " has" : "s have"} already sat this paper, so its questions can't be changed. ` +
+          `Everything else — the title, the window, the duration — is still editable.`,
+        409,
+        "questionIds"
+      );
+    }
+  }
 
   const subject = await assertOwnedSubject(schoolId, input.subjectId);
   const questionIds = await assertOwnedQuestions(

@@ -3,13 +3,16 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 5 — sitting a test.** Grading and results come next.
+**Status: Phase 6 — grading and results.**
 What works: school signup, login/logout, role-gated areas, hard separation
 between schools, the admin screens that populate a school, a question bank
-filled by hand or CSV, papers built from that bank and scheduled to sections —
-and students actually sitting them, with autosave that reaches the database on
+filled by hand or CSV, papers built from that bank and scheduled to sections,
+students actually sitting them — with autosave that reaches the database on
 every change, a server-owned countdown, and submission that happens whether or
-not the student's browser is still alive.
+not the student's browser is still alive — and every submitted paper marked in
+the same breath, with results, an answer-key review, per-question class
+accuracy and a section leaderboard that all stay sealed until the window
+closes.
 
 ## Stack
 
@@ -42,6 +45,9 @@ not the student's browser is still alive.
 | `lib/attempts.ts`          | Start/resume, autosave, submit, and the sweep                    |
 | `lib/sweep.ts`             | The opportunistic sweep run by ordinary requests                 |
 | `components/sitting/`      | The exam screen and its autosave engine                          |
+| `lib/grading.ts`           | Marking. The only place a score is worked out                    |
+| `lib/results.ts`           | Results, class analysis, leaderboard — and the visibility gate   |
+| `components/results/`      | The result, teacher analysis and leaderboard screens             |
 | `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
@@ -62,6 +68,13 @@ not the student's browser is still alive.
 | `app/student/(exam)/tests/[id]` | Sitting a paper. No app chrome, on purpose                  |
 | `app/api/attempts/*`       | Start/resume, autosave, submit                                   |
 | `app/api/cron/sweep-attempts` | Force-submits attempts whose deadline has passed              |
+| `app/api/attempts/[testId]/result` | One student's own result, once the window has closed      |
+| `app/api/tests/[id]/results`| The class picture for a paper, for teachers and admins          |
+| `app/api/student/results`  | A student's own results across every closed paper                |
+| `app/api/student/leaderboard` | Cumulative standings inside the student's own section         |
+| `app/student/tests/[id]/result` | Score, breakdown, rank and the answer key                   |
+| `app/student/leaderboard`  | The class table, the student's own row highlighted               |
+| `app/teacher/tests/[id]/results` | Distribution, worst questions first, every student         |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -121,8 +134,9 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. 80 cases covering tenant isolation, the whole school-setup flow, and
-CSV parsing. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
+bypasses. 233 cases covering tenant isolation, the whole school-setup flow,
+CSV parsing, the question bank, papers and their windows, sitting a paper, and
+marking and results. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
 each case covers and how to confirm the tests actually have teeth.
 
 `npm run test:only` skips the rebuild when `.next` is already current.
@@ -249,3 +263,49 @@ student's browser:
 The payload sent to a student's browser has question text and options and
 nothing else. There is no `correctOptionIndex` field to read out of the network
 tab, and a test asserts on the literal bytes.
+
+
+## Marking and results
+
+**A paper is marked the moment it is handed in.** Every path that ends an
+attempt — the student pressing Submit, their tab noticing the clock hit zero,
+and the sweep force-submitting a closed laptop — goes through the same
+`finishAttempt` in [`lib/grading.ts`](lib/grading.ts), which writes the status
+and the mark in one update. There is no queue and no second pass, so
+"submitted but never graded" is unreachable rather than merely unlikely.
+
+The mark is worked out from the test's `questionIds`, not from the responses: a
+question the student never opened still counts towards the total, as
+unanswered. Blank is counted as blank, never as wrong. Every count is written
+with `$set`, so re-running the marking on an already-marked attempt produces
+the same numbers rather than adding to them — `regradeAttempt` exists for that
+and is safe to run twice.
+
+**Nothing is visible until the window has closed for everyone.** A single
+guard in [`lib/results.ts`](lib/results.ts) answers one question — is
+`now >= test.closesAt`? — and every result, answer key, class analysis and
+leaderboard entry is behind it. It is enforced in the data layer, not in the
+page, so a student who guesses the URL of their own result gets the same 403
+that the UI would have shown them. Marks are computed and stored the whole
+time; they are simply not handed out. The tests prove both halves: attempts are
+already graded in the database while the API is still refusing to show them.
+
+**The student's screen** leads with the score, then correct / wrong / blank,
+then rank within their own section, then the paper itself with their answer and
+the right one side by side. Right and wrong are labelled as well as coloured.
+
+**The teacher's screen** at `/teacher/tests/[id]/results` opens with the
+distribution and then the thing worth reading — every question sorted worst
+first, the three under 60% flagged. Students who never sat the paper are their
+own row, "Not attempted", and sink to the bottom of every sort: not attempting
+is a different fact from scoring zero, and averaging them together would flatter
+or damn a class for the wrong reason.
+
+**The leaderboard** is cumulative across every closed paper and scoped to the
+student's own section — a student cannot ask for another class's table because
+the endpoint takes no parameters. Ranking is competition-style, so two students
+on 100% are both 1st and the next is 3rd.
+
+**Once anyone has sat a paper it freezes.** Changing its questions or subject
+after the first attempt is refused with a 409, because those attempts were
+marked against the paper as it stood.

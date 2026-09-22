@@ -43,13 +43,18 @@ export function TableFrame({
 export function Th({
   children,
   className,
+  // aria-sort is a property of the column header itself, not of any button
+  // inside it — putting it on the button is invalid for that role.
+  ariaSort,
 }: {
   children: ReactNode;
   className?: string;
+  ariaSort?: "ascending" | "descending" | "none";
 }) {
   return (
     <th
       scope="col"
+      aria-sort={ariaSort}
       className={cn(
         "eyebrow whitespace-nowrap px-5 py-3.5 text-ink",
         className
