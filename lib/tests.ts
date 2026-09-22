@@ -285,7 +285,15 @@ export async function updateTest(
     input.subjectId,
     input.questionIds
   );
-  const sectionIds = await assertOwnedSections(schoolId, input.sectionIds ?? []);
+  // `sectionIds` is optional, and an omitted field means "leave the classes
+  // alone" rather than "take it off every class". Treating the two the same
+  // would let any edit that did not happen to mention sections silently
+  // withdraw a paper — and after students had sat it, throw away the roster
+  // their results are reported against.
+  const sectionIds =
+    input.sectionIds === undefined
+      ? null
+      : await assertOwnedSections(schoolId, input.sectionIds);
 
   const publish = Boolean(input.publish);
 
@@ -333,13 +341,19 @@ export async function deleteTest(schoolId: string, id: string) {
 async function syncAssignments(
   schoolId: string,
   testId: string,
-  sectionIds: mongoose.Types.ObjectId[],
+  /** `null` means the caller did not mention sections, so leave them as they are. */
+  sectionIds: mongoose.Types.ObjectId[] | null,
   publish: boolean
 ) {
+  // Un-publishing withdraws the paper whether or not sections were mentioned:
+  // "not visible to students" is what a draft means, and it is enforced here
+  // rather than trusted at every read.
   if (!publish) {
     await TestAssignment.deleteMany({ schoolId, testId });
     return;
   }
+
+  if (sectionIds === null) return;
 
   await TestAssignment.deleteMany({
     schoolId,

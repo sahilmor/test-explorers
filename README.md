@@ -134,7 +134,7 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. 234 cases covering tenant isolation, the whole school-setup flow,
+bypasses. 236 cases covering tenant isolation, the whole school-setup flow,
 CSV parsing, the question bank, papers and their windows, sitting a paper, and
 marking and results. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
 each case covers and how to confirm the tests actually have teeth.

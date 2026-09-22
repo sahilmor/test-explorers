@@ -369,7 +369,20 @@ export async function getTeacherResults(
     Section.find({ _id: { $in: sectionIds }, schoolId }).select("name").lean(),
     // Everyone the paper was set for, so a student who never opened it still
     // appears — as "not attempted", which is a different fact from zero.
-    User.find({ schoolId, role: "student", sectionId: { $in: sectionIds } })
+    //
+    // Anyone who actually sat it is included too, even if they are no longer
+    // in an assigned section: a student can move class, and a paper can be
+    // reassigned, between the sitting and the marking. Leaving them out would
+    // drop a real mark from every average while still counting their attempt,
+    // which is how "2 submitted out of 0 assigned" happens.
+    User.find({
+      schoolId,
+      role: "student",
+      $or: [
+        { sectionId: { $in: sectionIds } },
+        { _id: { $in: attempts.map((a) => a.studentId) } },
+      ],
+    })
       .select("name email sectionId")
       .sort({ name: 1 })
       .lean(),
@@ -490,8 +503,10 @@ export async function getTeacherResults(
     },
     summary: {
       assigned: roster.length,
-      submitted: attempts.length,
-      notAttempted: roster.length - attempts.length,
+      // Counted off the rows rather than off the raw attempts, so the three
+      // numbers always add up even when a paper has been reassigned.
+      submitted: students.filter((s) => s.status !== "not_attempted").length,
+      notAttempted: students.filter((s) => s.status === "not_attempted").length,
       averagePercentage:
         percentages.length > 0
           ? Math.round(percentages.reduce((a, b) => a + b, 0) / percentages.length)

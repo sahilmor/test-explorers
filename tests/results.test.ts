@@ -839,6 +839,75 @@ describe("a paper that has been sat is frozen", () => {
     expect(res.body.test.durationMinutes).toBe(90);
   });
 
+  it("leaves the classes alone when an edit does not mention them", async () => {
+    const testId = await makeTest("Window nudge", { questionCount: 4 });
+    const { client } = await makeStudent("Nudge One", "nudge1@riverbend.test");
+    await sit(client, testId, { correct: 3 });
+
+    // Closing a paper early is the obvious reason to PATCH it, and nothing
+    // about that edit concerns which classes are sitting it.
+    const res = await teacher.patch(`/api/tests/${testId}`, {
+      title: "Window nudge",
+      subjectId: physicsId,
+      durationMinutes: 60,
+      questionIds: questionIds.slice(0, 4),
+      opensAt: new Date(Date.now() - 7_200_000).toISOString(),
+      closesAt: new Date(Date.now() - 60_000).toISOString(),
+      publish: true,
+    });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.test.sectionIds).toEqual([sectionAId]);
+
+    // And the roster the results are reported against survived it: the three
+    // numbers still add up, rather than "1 submitted out of 0 assigned".
+    const results = await teacher.get(`/api/tests/${testId}/results`);
+    expect(results.status).toBe(200);
+    expect(results.body.summary.assigned).toBeGreaterThanOrEqual(1);
+    expect(results.body.summary.submitted).toBe(1);
+    expect(results.body.summary.notAttempted).toBe(
+      results.body.summary.assigned - results.body.summary.submitted
+    );
+    expect(results.body.summary.averagePercentage).not.toBeNull();
+    expect(results.body.students.some((r: { name: string }) => r.name === "Nudge One")).toBe(true);
+  });
+
+  it("still counts someone who sat it and then left the section", async () => {
+    const testId = await makeTest("Moved on", { questionCount: 4 });
+    const { client, id } = await makeStudent("Mover One", "mover1@riverbend.test");
+    await sit(client, testId, { correct: 4 });
+
+    // The paper is reassigned to a section this student is not in.
+    const other = await admin.post("/api/sections", {
+      name: "Grade 9 - Moved",
+      grade: 9,
+    });
+    await teacher.patch(`/api/tests/${testId}`, {
+      title: "Moved on",
+      subjectId: physicsId,
+      durationMinutes: 60,
+      questionIds: questionIds.slice(0, 4),
+      opensAt: new Date(Date.now() - 7_200_000).toISOString(),
+      closesAt: new Date(Date.now() - 60_000).toISOString(),
+      sectionIds: [other.body.section.id],
+      publish: true,
+    });
+
+    const results = await teacher.get(`/api/tests/${testId}/results`);
+
+    expect(results.status).toBe(200);
+    // Their mark is still in the averages rather than counted and then dropped.
+    expect(results.body.summary.notAttempted).toBe(
+      results.body.summary.assigned - results.body.summary.submitted
+    );
+    expect(results.body.summary.notAttempted).toBeGreaterThanOrEqual(0);
+    expect(results.body.summary.highest).toBe(100);
+    const row = results.body.students.find(
+      (r: { studentId: string }) => r.studentId === id
+    );
+    expect(row?.score).toBe(4);
+  });
+
   it("lets a paper nobody has sat be rebuilt freely", async () => {
     const testId = await makeTest("Untouched paper", { questionCount: 3 });
 
