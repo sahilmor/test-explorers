@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
+import { assertCanStartAttempt } from "@/lib/entitlements";
 import { SetupError } from "@/lib/school-setup";
 import Attempt from "@/models/Attempt";
 import Question from "@/models/Question";
@@ -178,6 +179,11 @@ export async function startOrResumeAttempt(
   const existing = await Attempt.findOne({ testId, studentId }).lean();
 
   if (!existing) {
+    // A lapsed plan stops new sittings, and only new ones — an attempt
+    // already open keeps saving and submitting, because it falls through this
+    // branch entirely.
+    await assertCanStartAttempt(schoolId, now);
+
     // Only block a *new* start outside the window. A student already sitting
     // keeps their attempt so it can be submitted properly rather than vanish.
     if (now < test.opensAt) {

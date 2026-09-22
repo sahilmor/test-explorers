@@ -3,7 +3,7 @@
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
 
-**Status: Phase 6 — grading and results.**
+**Status: Phase 7 — admin dashboard and billing.**
 What works: school signup, login/logout, role-gated areas, hard separation
 between schools, the admin screens that populate a school, a question bank
 filled by hand or CSV, papers built from that bank and scheduled to sections,
@@ -12,7 +12,8 @@ every change, a server-owned countdown, and submission that happens whether or
 not the student's browser is still alive — and every submitted paper marked in
 the same breath, with results, an answer-key review, per-question class
 accuracy and a section leaderboard that all stay sealed until the window
-closes.
+closes — and a plan that actually decides what a school may do, with a real
+Razorpay payment as the thing that changes it.
 
 ## Stack
 
@@ -48,6 +49,13 @@ closes.
 | `lib/grading.ts`           | Marking. The only place a score is worked out                    |
 | `lib/results.ts`           | Results, class analysis, leaderboard — and the visibility gate   |
 | `components/results/`      | The result, teacher analysis and leaderboard screens             |
+| `lib/plans.ts`             | Prices, caps, trial length — no Mongoose, so the UI shares them   |
+| `lib/entitlements.ts`      | **The only place a plan rule is written.** Every `assertCan…`     |
+| `lib/errors.ts`            | `SetupError`, on its own so entitlements can subclass it          |
+| `lib/razorpay.ts`          | Orders and the two signature checks, over REST. No SDK            |
+| `lib/billing.ts`           | Opening a payment, applying a verified one, recording a failure   |
+| `lib/dashboard.ts`         | The admin overview's numbers. Every one of them a query           |
+| `lib/platform.ts`          | The owner view — the one module that reads across tenants         |
 | `models/User.ts`           | `User` { schoolId, name, email, passwordHash, role, sectionId, subjectIds, sectionIds } |
 | `app/signup`, `app/login`  | The two auth screens                                             |
 | `app/admin\|teacher\|student` | Role areas, each gated server-side in its `layout.tsx`        |
@@ -75,6 +83,11 @@ closes.
 | `app/student/tests/[id]/result` | Score, breakdown, rank and the answer key                   |
 | `app/student/leaderboard`  | The class table, the student's own row highlighted               |
 | `app/teacher/tests/[id]/results` | Distribution, worst questions first, every student         |
+| `app/admin/billing`        | Plan, price, and every payment attempt                           |
+| `app/api/billing/order`    | Opens a Razorpay order. Amount comes from the plan, never a body |
+| `app/api/billing/verify`   | The Checkout callback, signature-checked before anything moves   |
+| `app/api/billing/webhook`  | Razorpay's own account of a payment. The authoritative path      |
+| `app/platform`             | Every school and what it is worth. Owner only, 404 for everyone else |
 | `app/globals.css`          | **The design system** — palette, type scale, shadows, motion     |
 | `proxy.ts`                 | Convenience redirect only. Not a security boundary               |
 | `tests/`                   | Tenant-isolation suite against a real server and a real database |
@@ -134,9 +147,9 @@ npm test
 
 That builds the app, starts a throwaway MongoDB replica set and the real
 production server, and drives them over HTTP — no mocks and no test-only
-bypasses. 236 cases covering tenant isolation, the whole school-setup flow,
+bypasses. 264 cases covering tenant isolation, the whole school-setup flow,
 CSV parsing, the question bank, papers and their windows, sitting a paper, and
-marking and results. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
+marking and results, and billing with its enforcement. See [docs/tenant-isolation.md](docs/tenant-isolation.md) for what
 each case covers and how to confirm the tests actually have teeth.
 
 `npm run test:only` skips the rebuild when `.next` is already current.
@@ -314,3 +327,75 @@ on 100% are both 1st and the next is 3rd.
 **Once anyone has sat a paper it freezes.** Changing its questions or subject
 after the first attempt is refused with a 409, because those attempts were
 marked against the paper as it stood.
+
+
+## Plans, payment and what they gate
+
+A billing model that does not change what anyone can do is a spreadsheet with
+extra steps, so the rules come first and the payment second.
+
+**One plan.** ₹9,999 a year per school, up to 500 students. A new school gets
+30 days of trial and 50 student places, set at signup rather than inferred
+later, so revising the trial for new signups never moves an existing school's
+cap underneath it.
+
+**The stored plan is not trusted.** `School.plan` goes stale the moment
+`planValidUntil` passes, exactly as `Test.status` does when a window closes.
+`effectivePlan()` in [`lib/plans.ts`](lib/plans.ts) recomputes from the dates
+on every read, so a trial that ran out overnight is expired on the next
+request with nothing having had to run in between. The owner view shows both,
+side by side, and they disagree all the time.
+
+**Enforcement is one file.** [`lib/entitlements.ts`](lib/entitlements.ts) holds
+every plan rule; `createTest`, `createStudent`, the CSV import and
+`startOrResumeAttempt` each call one `assertCan…` at the top and then get on
+with their work. Same arrangement as `withAuth` from Phase 1: one place to
+read, one place to change, and no chance of a new route shipping without the
+check because somebody forgot to paste it in.
+
+What expiry stops is growth — new papers, new students, new sittings. It never
+stops reading. An expired school signs in and sees every paper, every mark and
+every student exactly as before, because losing access to your own data over a
+lapsed invoice is how you lose a customer permanently. It also never stops a
+sitting already in progress: a student mid-paper keeps saving and still
+submits, and Phase 6 still grades them. Their work is theirs.
+
+At the cap, adding one student is refused with the numbers in the message. A
+CSV import is different — it fills the places that are left and skips the rest
+with a per-row reason, the same way it already reports duplicates, rather than
+refusing a 300-row file over the last four.
+
+**A payment is only real once a signature checks out.** Nothing about a school
+changes on the browser's say-so. The Checkout callback is verified with
+`HMAC_SHA256(order_id|payment_id, key_secret)`, and then Razorpay is asked
+directly what the payment's status and amount actually were — a valid
+signature proves the message is ours, not that the money arrived or that the
+right amount did. A forged signature, a declined card and a short payment all
+leave the school exactly as it was, and each is recorded as a failed attempt
+so "I paid and nothing happened" is answerable.
+
+The webhook is the authoritative path, not the callback: a customer whose
+laptop dies between paying and being redirected still gets their plan. Both
+arrive for the same money, and Razorpay retries webhooks, so applying a
+payment is guarded on the order still being unpaid — whichever arrives second
+reports that it was already done rather than selling a second year.
+
+Renewing early adds to the time left instead of discarding it.
+
+**Payments are optional to run.** With no `RAZORPAY_KEY_ID`, the app works
+exactly as before, the billing page says plainly that payments aren't switched
+on, and the order route answers 501 rather than faking a checkout.
+[docs/setup.md](docs/setup.md) Part 3 walks through getting test keys.
+
+## The owner view
+
+`/platform` lists every school, its plan and its revenue, and is the only
+screen in the app that deliberately reads across tenants. It is gated on the
+signed-in user's own email being in `PLATFORM_OWNER_EMAILS` — no new role, so
+nothing about the tenant model changes, and no secret in a URL to end up in a
+log. Everyone else gets a 404, including signed-out visitors: redirecting them
+to a sign-in page would advertise that the route is real.
+
+Revenue counts captured payments and nothing else. An order that was opened
+and abandoned is not money, and counting it would be the quickest way to start
+lying to yourself about the business.

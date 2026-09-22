@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanBlockNotice } from "@/components/billing/plan-banner";
 import { useState } from "react";
 import { WandSparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export function TestForm({
   sections,
   fieldErrors,
   formError,
+  planBlock,
   formId,
   onSubmit,
 }: {
@@ -61,6 +63,8 @@ export function TestForm({
   sections: SectionOption[];
   fieldErrors: Record<string, string>;
   formError: string | null;
+  /** A refusal money fixes, rendered as its own notice rather than a form error. */
+  planBlock?: string | null;
   formId: string;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
@@ -108,6 +112,7 @@ export function TestForm({
   return (
     <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
       <ImplicitSubmit />
+      {planBlock ? <PlanBlockNotice message={planBlock} canUpgrade={false} /> : null}
       {formError ? <FormError>{formError}</FormError> : null}
 
       <Field

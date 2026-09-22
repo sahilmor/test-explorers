@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
+import { assertCanCreateTest } from "@/lib/entitlements";
 import { SetupError } from "@/lib/school-setup";
 import Question from "@/models/Question";
 import Section from "@/models/Section";
@@ -212,6 +213,10 @@ export async function createTest(
   input: TestInputFields
 ) {
   await connectToDatabase();
+
+  // Before anything is validated or written: an expired school cannot set new
+  // work. See lib/entitlements.ts — every plan rule in the app is in there.
+  await assertCanCreateTest(schoolId);
 
   const subject = await assertOwnedSubject(schoolId, input.subjectId);
   const questionIds = await assertOwnedQuestions(

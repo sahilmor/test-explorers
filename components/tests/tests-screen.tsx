@@ -56,6 +56,9 @@ export function TestsScreen({
   const [busy, setBusy] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  // An expired plan stops a paper being set. That is not a validation error
+  // and should not look like one.
+  const [planBlock, setPlanBlock] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/tests");
@@ -66,6 +69,7 @@ export function TestsScreen({
   function clearErrors() {
     setFieldErrors({});
     setFormError(null);
+    setPlanBlock(null);
   }
 
   async function save(publish: boolean) {
@@ -92,6 +96,11 @@ export function TestsScreen({
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      if (payload.planBlock) {
+        setPlanBlock(payload.error);
+        setBusy(false);
+        return;
+      }
       setFieldErrors(payload.fields ?? {});
       setFormError(payload.fields ? null : (payload.error ?? "That didn't work."));
       setBusy(false);
@@ -332,6 +341,7 @@ export function TestsScreen({
             sections={sections}
             fieldErrors={fieldErrors}
             formError={formError}
+            planBlock={planBlock}
             // Enter submits as a draft — the safe default. Publishing is a
             // deliberate click.
             onSubmit={(e) => {

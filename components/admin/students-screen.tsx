@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanBlockNotice } from "@/components/billing/plan-banner";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -53,6 +54,9 @@ export function StudentsScreen({
   const [busy, setBusy] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  // A refusal that money fixes reads differently from a typo in an email
+  // address, so it is held separately and rendered as its own notice.
+  const [planBlock, setPlanBlock] = useState<string | null>(null);
 
   // Both filters run over the loaded list, so a 200-student school filters
   // instantly instead of waiting on a request per keystroke.
@@ -82,6 +86,7 @@ export function StudentsScreen({
     setBusy(true);
     setFieldErrors({});
     setFormError(null);
+    setPlanBlock(null);
 
     const res = await fetch("/api/students", {
       method: "POST",
@@ -96,6 +101,11 @@ export function StudentsScreen({
     const payload = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      if (payload.planBlock) {
+        setPlanBlock(payload.error);
+        setBusy(false);
+        return;
+      }
       setFieldErrors(payload.fields ?? {});
       setFormError(payload.fields ? null : (payload.error ?? "That didn't work."));
       setBusy(false);
@@ -276,6 +286,7 @@ export function StudentsScreen({
       >
         <form id="student-form" onSubmit={save} noValidate className="flex flex-col gap-5">
           <ImplicitSubmit />
+          {planBlock ? <PlanBlockNotice message={planBlock} /> : null}
           {formError ? <FormError>{formError}</FormError> : null}
 
           <Field

@@ -1,6 +1,12 @@
 import mongoose, { type QueryFilter } from "mongoose";
 import { hashPassword } from "@/lib/accounts";
 import { connectToDatabase } from "@/lib/db";
+import { SetupError } from "@/lib/errors";
+import {
+  assertCanAddStudents,
+  assertPlanActive,
+  studentCapMessage,
+} from "@/lib/entitlements";
 import Section from "@/models/Section";
 import Subject from "@/models/Subject";
 import User, { type UserDoc } from "@/models/User";
@@ -14,16 +20,10 @@ import { parseCsv, toObjects, STUDENT_CSV_COLUMNS } from "@/lib/csv";
  * verified session. Nothing in this file reads a request.
  */
 
-export class SetupError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly field?: string
-  ) {
-    super(message);
-    this.name = "SetupError";
-  }
-}
+// Defined in lib/errors.ts and re-exported here, because this module has been
+// the place to import it from since Phase 2 and there is no reason to make
+// every caller change.
+export { SetupError } from "@/lib/errors";
 
 function isDuplicateKey(error: unknown): boolean {
   return (
@@ -463,6 +463,10 @@ export async function createStudent(
 ) {
   await connectToDatabase();
 
+  // Plan and cap first, so a refusal costs one round trip and never leaves a
+  // half-made account behind. lib/entitlements.ts owns both rules.
+  await assertCanAddStudents(schoolId, 1);
+
   const section = await Section.findOne({ _id: input.sectionId, schoolId })
     .select("_id name")
     .lean();
@@ -553,6 +557,16 @@ export async function importStudentsFromCsv(
     );
   }
 
+  // An expired plan refuses the whole file up front — there is no sensible
+  // partial answer to "your subscription lapsed". The cap is different: it is
+  // a number of places, so the import fills them and says which rows missed
+  // out, the same way it already reports duplicates.
+  const entitlement = await assertPlanActive(
+    schoolId,
+    "You can't import students while"
+  );
+  let placesLeft = entitlement.studentsRemaining;
+
   const sections = await Section.find({ schoolId }).select("name").lean();
   const sectionByName = new Map(
     sections.map((s) => [s.name.trim().toLowerCase(), s._id])
@@ -622,6 +636,14 @@ export async function importStudentsFromCsv(
       skip(`${email} also appears on line ${firstSeen} of this file.`);
       continue;
     }
+
+    // Checked last, so a row that was going to be skipped anyway does not
+    // consume one of the remaining places.
+    if (placesLeft <= 0) {
+      skip(studentCapMessage(entitlement));
+      continue;
+    }
+    placesLeft--;
 
     seenInFile.set(email, line);
     results.push({ line, name, email, section: sectionName, status: "created" });

@@ -365,3 +365,76 @@ unanswered handling, the recompute-safety check, and every case asserting that
 an open paper's result, answer key and class analysis are refused — including
 the one that reads the attempts straight out of MongoDB to show they were
 graded all along. Verified when it was written.
+
+
+## Phase 7: plans, payment and the owner view
+
+Billing adds two things that cut across the tenant rule, so both are worth
+naming.
+
+### A payment lands on the school that opened the order
+
+`applyVerifiedPayment` finds the school by looking for the order id inside its
+`subscriptionHistory`, not by reading a school id out of the request. A
+`schoolId` in a payment body would let one school pay onto another's account —
+or, more likely, let a careless client attribute money to the wrong tenant.
+
+The callback route passes the session's own school id *as well*, so a correctly
+signed payment for somebody else's order is a 404 rather than an activation.
+Both halves are tested: one school paying properly must leave every other
+school's plan, cap and history untouched.
+
+### The owner view is the one query with no school filter
+
+`/platform` and `/api/platform` read every school on purpose, so the gate in
+front of them is the whole of their security. It is `requirePlatformOwner` in
+[`lib/platform.ts`](../lib/platform.ts): a signed-in user whose own email
+address — read from the database, not from the token, which was signed at
+login and may since be wrong — appears in `PLATFORM_OWNER_EMAILS`.
+
+Every failure is the same 404, including having no session at all. That is
+deliberately different from the rest of the app, which redirects to /login:
+bouncing a stranger to a sign-in page tells them the route is real and worth
+returning to with credentials.
+
+No new role was added. A fourth role would have meant an owner user sitting
+inside some school's tenant, which is exactly the boundary Phase 1 spent
+effort keeping clean.
+
+### Confirming these tests have teeth too
+
+The whole payment flow runs against a stub Razorpay over real HTTP
+([`tests/razorpay-stub.ts`](../tests/razorpay-stub.ts)) — `RAZORPAY_API_BASE`
+points at it and nothing else differs. It is configuration, not a bypass:
+every signature is still computed with the same HMAC and every amount is still
+compared against the plan.
+
+Two rounds of sabotage, four cases each.
+
+```ts
+// round 1
+// lib/entitlements.ts — never refuse anything
+if (false && entitlement.plan === "expired") { ... }
+if (false && entitlement.studentsRemaining < howMany) { ... }
+// lib/razorpay.ts — believe the browser
+export function verifyCheckoutSignature() { return true; }
+// lib/billing.ts — apply a payment as often as it arrives
+const already = false;  // and drop the status guard from the update
+```
+
+Red: the cap refusal, the three expiry blocks, the forged signature, and the
+replayed webhook selling a second year.
+
+```ts
+// round 2
+// lib/entitlements.ts — let a new sitting start on a dead plan
+// lib/school-setup.ts — drop the per-row cap check in the CSV import
+// lib/billing.ts — stop comparing the amount paid to the plan
+// lib/razorpay.ts — accept any webhook signature
+export function verifyWebhookSignature() { return true; }
+```
+
+Red: the partial import, the blocked new sitting, the short payment, and the
+mis-signed webhook.
+
+Eight guards, eight independent failures. Verified when it was written.

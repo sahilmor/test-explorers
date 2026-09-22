@@ -26,6 +26,14 @@ export type Harness = {
 /** Matches CRON_SECRET below; tests send it to call the sweep endpoint. */
 export const TEST_CRON_SECRET = "test-cron-secret";
 
+/** Obviously-fake Razorpay credentials. The stub in billing.test.ts answers. */
+export const TEST_RAZORPAY_KEY_ID = "rzp_test_harness";
+export const TEST_RAZORPAY_KEY_SECRET = "harness-key-secret";
+export const TEST_RAZORPAY_WEBHOOK_SECRET = "harness-webhook-secret";
+
+/** Whoever the platform-owner tests sign in as. */
+export const TEST_OWNER_EMAIL = "owner@platform.test";
+
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -62,7 +70,9 @@ async function waitForServer(url: string, child: ChildProcess, timeoutMs = 90_00
   throw new Error(`server did not become ready at ${url} within ${timeoutMs}ms`);
 }
 
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(
+  options: { razorpayApiBase?: string } = {}
+): Promise<Harness> {
   // mongodb-memory-server would download a mongod; if Homebrew already put one
   // on this machine, reuse it instead.
   process.env.MONGOMS_SYSTEM_BINARY ??= "/opt/homebrew/bin/mongod";
@@ -90,6 +100,17 @@ export async function startHarness(): Promise<Harness> {
         // The sweep endpoint refuses unauthenticated calls in production, and
         // the harness runs a production build.
         CRON_SECRET: "test-cron-secret",
+        // Billing. The keys are fake and the API base points at a stub the
+        // test suite runs, so the whole payment flow is exercised over real
+        // HTTP without an account and without the internet. Signatures are
+        // still verified and amounts still checked — see lib/razorpay.ts.
+        RAZORPAY_KEY_ID: TEST_RAZORPAY_KEY_ID,
+        RAZORPAY_KEY_SECRET: TEST_RAZORPAY_KEY_SECRET,
+        RAZORPAY_WEBHOOK_SECRET: TEST_RAZORPAY_WEBHOOK_SECRET,
+        ...(options.razorpayApiBase
+          ? { RAZORPAY_API_BASE: options.razorpayApiBase }
+          : {}),
+        PLATFORM_OWNER_EMAILS: TEST_OWNER_EMAIL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     }

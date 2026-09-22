@@ -1,6 +1,9 @@
-# Setup: MongoDB Atlas + Vercel
+# Setup: MongoDB Atlas + Vercel + Razorpay
 
-Two one-time setups. Do Atlas first — you need its connection string for Vercel.
+Three one-time setups. Do Atlas first — you need its connection string for
+Vercel. Razorpay can wait until you actually want to charge anyone; without it
+the app runs exactly as before and the upgrade page says so plainly instead of
+pretending to take payments.
 
 ---
 
@@ -150,6 +153,116 @@ When the build finishes, Vercel gives you a URL like
 
 If `/api/ping` returns `{"ok":false,...}`, read the `error` field, and check the
 function logs under **Vercel → your project → Logs**.
+
+---
+
+## Part 3 — Razorpay (test mode first)
+
+Nothing here is needed to run the app. Skip it and every school stays on its
+trial, the billing page explains that payments aren't switched on, and
+`/api/billing/order` answers 501 rather than faking a checkout.
+
+### 3.1 — Make an account
+
+1. Go to [razorpay.com](https://razorpay.com) and **Sign Up**. A business
+   email is fine; you do not need to complete KYC to use test mode.
+2. You land on the dashboard. Find the **Test Mode / Live Mode** toggle (top
+   right on web, under the account menu on narrow screens) and make sure it
+   says **Test Mode**. Everything below is test mode only — no real money can
+   move, and the keys are different from your live ones.
+
+### 3.2 — Generate API keys
+
+1. **Settings → API Keys** (under *Account & Settings → Website and app
+   settings* on newer dashboards).
+2. Click **Generate Test Key**.
+3. You get a **Key ID** (starts `rzp_test_`) and a **Key Secret**. The secret
+   is shown **once** — copy it now. If you lose it, regenerate; you cannot
+   read it back.
+
+Put both in `.env.local`:
+
+```
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+The Key ID reaches the browser — Razorpay Checkout needs it, and it is meant
+to be public. **The Key Secret never does.** It is only ever used server-side,
+to sign and verify. If it ends up in a client component, regenerate it.
+
+### 3.3 — Set up the webhook
+
+The webhook is what makes a payment stick when a customer's laptop dies
+between paying and being redirected back. It is not optional in any deployment
+you expect to take money in.
+
+1. **Settings → Webhooks → Add New Webhook**.
+2. **Webhook URL**: `https://<your-domain>/api/billing/webhook`
+   (for local testing, expose your dev server with something like
+   `ngrok http 3000` and use the public URL it prints — Razorpay cannot reach
+   `localhost`).
+3. **Secret**: type any long random string. Generate one with
+   `openssl rand -hex 32`. This is **not** your Key Secret; it is a separate
+   secret used only to sign webhook bodies.
+4. **Active Events**: tick `payment.captured` and `payment.failed`. Nothing
+   else is acted on.
+5. Save, then add the same string to `.env.local`:
+
+```
+RAZORPAY_WEBHOOK_SECRET=<the string you just typed>
+```
+
+Without this variable the webhook route refuses every delivery with a 501,
+which is the right answer — an unsigned POST from the open internet must never
+be able to mark a school as paid.
+
+### 3.4 — Add the same three to Vercel
+
+**Project → Settings → Environment Variables**, all three, for Production
+(and Preview if you want to test there). Redeploy afterwards — environment
+variables are read at build and boot.
+
+### 3.5 — Make a test payment
+
+1. Sign in as a school admin, go to **Plan** in the admin nav.
+2. Click **Upgrade now**. Razorpay's checkout opens; the page says *Test mode
+   — no real money moves.*
+3. Pay with a Razorpay test instrument. The card
+   `4111 1111 1111 1111` with any future expiry and any CVV works, or use
+   **UPI → success@razorpay** for the UPI flow.
+4. The button goes to **Confirming…** while the server checks the signature,
+   then the plan flips to **Active** and the payment appears in the history
+   table below.
+
+To see a decline, use UPI `failure@razorpay` — the plan must stay exactly as
+it was, and the attempt shows in the history as "Didn't go through".
+
+### What to check if it doesn't work
+
+| What you see | Usually means |
+| --- | --- |
+| "Payments aren't switched on for this deployment yet" | `RAZORPAY_KEY_ID` or `RAZORPAY_KEY_SECRET` missing. On Vercel, redeploy after adding them. |
+| Checkout opens, payment succeeds, plan stays on trial | The callback failed verification. Check the function logs for `/api/billing/verify`; a mismatched `RAZORPAY_KEY_SECRET` is the usual cause. |
+| Webhook deliveries failing in the Razorpay dashboard | `RAZORPAY_WEBHOOK_SECRET` missing (501) or different from the one in the dashboard (400). |
+| "That payment doesn't match an order we opened" | The order was created against a different database — e.g. paying on production with a local `.env.local` still pointed at Atlas. |
+
+---
+
+## Part 4 — The platform owner view
+
+`/platform` lists every school, its plan and revenue. It is gated on your own
+email address:
+
+```
+PLATFORM_OWNER_EMAILS=you@example.com
+```
+
+Comma-separate to allow more than one. It defaults to
+`mor.sahil05.28@gmail.com`, so set it explicitly on any deployment that is not
+yours. You reach the page by signing in as a normal user whose email is on that
+list — there is no separate owner login. Anyone else gets a 404, including
+signed-out visitors, so the route never advertises itself.
 
 ---
 

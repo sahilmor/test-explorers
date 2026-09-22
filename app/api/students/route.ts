@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError, createStudent, listStudents } from "@/lib/school-setup";
+import { setupErrorResponse } from "@/lib/api-response";
 import { createStudentSchema, fieldErrors, objectIdSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -47,13 +48,7 @@ export const POST = withAuth(
       return NextResponse.json({ student }, { status: 201 });
     } catch (error) {
       if (error instanceof SetupError) {
-        return NextResponse.json(
-          {
-            error: error.message,
-            fields: error.field ? { [error.field]: error.message } : undefined,
-          },
-          { status: error.status }
-        );
+        return setupErrorResponse(error);
       }
       console.error("[/api/students POST] failed:", error);
       return NextResponse.json({ error: "Could not add that student." }, { status: 500 });

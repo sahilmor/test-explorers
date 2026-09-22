@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
+import { setupErrorResponse } from "@/lib/api-response";
 import { startOrResumeAttempt } from "@/lib/attempts";
 import { objectIdSchema } from "@/lib/validation";
 
@@ -32,7 +33,7 @@ export const POST = withAuth(
       );
     } catch (error) {
       if (error instanceof SetupError) {
-        return NextResponse.json({ error: error.message }, { status: error.status });
+        return setupErrorResponse(error);
       }
       console.error("[/api/attempts/start] failed:", error);
       return NextResponse.json({ error: "Could not start that test." }, { status: 500 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { setupErrorResponse } from "@/lib/api-response";
 import { CsvError } from "@/lib/csv";
 import { SetupError, importStudentsFromCsv } from "@/lib/school-setup";
 
@@ -80,7 +81,7 @@ export const POST = withAuth(
         );
       }
       if (error instanceof SetupError) {
-        return NextResponse.json({ error: error.message }, { status: error.status });
+        return setupErrorResponse(error);
       }
 
       console.error("[/api/students/bulk] failed:", error);

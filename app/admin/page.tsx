@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeading } from "@/components/app/app-shell";
+import { NavCard } from "@/components/app/nav-card";
+import { PlanBanner } from "@/components/billing/plan-banner";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/data-table";
+import { Stat } from "@/components/results/result-bits";
 import { requireRole } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
+import { getAdminStats } from "@/lib/dashboard";
+import { getEntitlement } from "@/lib/entitlements";
 import { listSections } from "@/lib/school-setup";
-import School from "@/models/School";
+import { sweepSchool } from "@/lib/sweep";
 import Subject from "@/models/Subject";
 import User from "@/models/User";
 import { cn } from "cn";
@@ -15,23 +20,31 @@ export const metadata: Metadata = { title: "Admin" };
 export const dynamic = "force-dynamic";
 
 /**
- * The admin home doubles as the setup checklist. A brand-new school lands
- * here, so it has to say what to do first rather than show four empty counters.
+ * The admin overview.
+ *
+ * Two jobs, and which one leads depends on where the school is. A brand-new
+ * school has nothing to count, so the setup checklist comes first and the
+ * stats would only be four zeroes. Once it is running, the numbers lead and
+ * the checklist drops away.
+ *
+ * Every figure below is a query in lib/dashboard.ts, and every one carries the
+ * sentence that defines it. Nothing here is illustrative.
  */
 export default async function AdminHome() {
   const session = await requireRole("admin");
 
   await connectToDatabase();
 
-  // Every query is filtered by the token's schoolId. Nothing here can be
-  // pointed at another school.
-  const [school, sections, subjectCount, teacherCount, studentCount] =
+  // So "open right now" does not include a paper whose deadline quietly passed.
+  await sweepSchool(session.schoolId);
+
+  const [entitlement, stats, sections, subjectCount, teacherCount] =
     await Promise.all([
-      School.findById(session.schoolId).select("name plan planValidUntil").lean(),
+      getEntitlement(session.schoolId),
+      getAdminStats(session.schoolId),
       listSections(session.schoolId),
       Subject.countDocuments({ schoolId: session.schoolId }),
       User.countDocuments({ schoolId: session.schoolId, role: "teacher" }),
-      User.countDocuments({ schoolId: session.schoolId, role: "student" }),
     ]);
 
   const steps = [
@@ -63,36 +76,79 @@ export default async function AdminHome() {
       href: "/admin/students",
       label: "Import your students",
       blurb: "A CSV with name, email and section does a whole year group at once.",
-      count: studentCount,
+      count: entitlement.studentCount,
       noun: "student",
       tone: "cobalt" as const,
     },
   ];
 
-  const remaining = steps.filter((s) => s.count === 0);
-  const nextStep = remaining[0];
-
-  const trialEnds = school?.planValidUntil
-    ? new Date(school.planValidUntil).toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "—";
+  const nextStep = steps.find((s) => s.count === 0);
+  const setUp = !nextStep;
 
   return (
     <div className="space-y-10">
       <PageHeading
         eyebrow="Admin"
-        title={school?.name ?? "Your school"}
+        title={entitlement.schoolName}
         blurb={
-          nextStep
-            ? "Four steps to a school that's ready to run papers. Here's where you are."
-            : "Your school is set up. Question banks and papers arrive in the next phase."
+          setUp
+            ? "What's happening across your school right now."
+            : "Four steps to a school that's ready to run papers. Here's where you are."
         }
       />
 
-      {nextStep ? (
+      <PlanBanner entitlement={entitlement} />
+
+      {setUp ? (
+        <section>
+          <h2 className="sr-only">This school at a glance</h2>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Tests conducted"
+              value={stats.testsConducted}
+              hint="closed papers that someone sat"
+            />
+            <Stat
+              label="Open right now"
+              value={stats.openNow}
+              tone={stats.openNow > 0 ? "correct" : "paper"}
+              hint={stats.openNow > 0 ? "being sat as you read this" : "nothing live"}
+            />
+            <Stat
+              label={`Next ${stats.upcomingWindowDays} days`}
+              value={stats.upcoming}
+              hint="papers scheduled to open"
+            />
+            <Stat
+              label="Active students"
+              value={stats.activeStudents}
+              hint={`of ${stats.studentsOnRoll} on the roll have sat a paper`}
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <StudentCapCard
+              studentCount={entitlement.studentCount}
+              maxStudents={entitlement.maxStudents}
+            />
+
+            <NavCard
+              href="/admin/billing"
+              tone="cobalt"
+              title="Plan and billing"
+              body="What you're on, what it covers, and every payment you've made."
+              meta={
+                entitlement.plan === "active"
+                  ? `Active · renews in ${entitlement.daysRemaining} days`
+                  : entitlement.plan === "trial"
+                    ? `Trial · ${entitlement.daysRemaining} days left`
+                    : "Expired · renew to continue"
+              }
+            />
+          </div>
+        </section>
+      ) : (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-4 rounded-xl border-2 border-ink bg-lime px-5 py-5 shadow-[5px_5px_0_var(--ink)]">
           <div className="min-w-0 flex-1">
             <p className="eyebrow text-ink/70">Next up</p>
@@ -107,11 +163,11 @@ export default async function AdminHome() {
             render={<Link href={nextStep.href}>Let&apos;s go</Link>}
           />
         </div>
-      ) : null}
+      )}
 
       <section>
         <h2 className="font-display text-xl font-bold tracking-tight text-ink">
-          Setup checklist
+          {setUp ? "Your school" : "Setup checklist"}
         </h2>
 
         <ol className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -134,9 +190,7 @@ export default async function AdminHome() {
                     aria-hidden="true"
                     className={cn(
                       "grid size-9 shrink-0 place-items-center rounded-full border-2 border-ink font-display text-sm font-extrabold",
-                      done
-                        ? "bg-lime text-ink"
-                        : "bg-paper-deep text-ink-soft"
+                      done ? "bg-lime text-ink" : "bg-paper-deep text-ink-soft"
                     )}
                   >
                     {done ? "✓" : index + 1}
@@ -166,27 +220,55 @@ export default async function AdminHome() {
           })}
         </ol>
       </section>
+    </div>
+  );
+}
 
-      <section className="flex flex-wrap gap-4">
-        <div className="min-w-[10rem] flex-1 rounded-xl border-2 border-ink bg-paper-deep px-5 py-4">
-          <p className="eyebrow text-ink-soft">Plan</p>
-          <p className="mt-1.5 font-display text-lg font-extrabold capitalize text-ink">
-            {school?.plan ?? "trial"}
-          </p>
-        </div>
-        <div className="min-w-[10rem] flex-1 rounded-xl border-2 border-ink bg-paper-deep px-5 py-4">
-          <p className="eyebrow text-ink-soft">Trial ends</p>
-          <p className="mt-1.5 font-display text-lg font-extrabold text-ink">
-            {trialEnds}
-          </p>
-        </div>
-        <div className="min-w-[10rem] flex-1 rounded-xl border-2 border-ink bg-paper-deep px-5 py-4">
-          <p className="eyebrow text-ink-soft">People</p>
-          <p className="mt-1.5 font-display text-lg font-extrabold text-ink">
-            {teacherCount + studentCount + 1}
-          </p>
-        </div>
-      </section>
+/**
+ * The student cap as a bar.
+ *
+ * Shown always rather than only when close, because the number that stops an
+ * import at 3pm on a Tuesday should not be a surprise.
+ */
+function StudentCapCard({
+  studentCount,
+  maxStudents,
+}: {
+  studentCount: number;
+  maxStudents: number;
+}) {
+  const pct =
+    maxStudents > 0 ? Math.min(100, Math.round((studentCount / maxStudents) * 100)) : 0;
+  const full = studentCount >= maxStudents;
+
+  return (
+    <div className="rounded-xl border-2 border-ink bg-paper-pure p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="eyebrow text-ink-soft">Students on your plan</p>
+        <p className="font-display text-sm font-bold text-ink tabular-nums">
+          {studentCount} / {maxStudents}
+        </p>
+      </div>
+
+      <div
+        className="mt-3 h-3.5 w-full overflow-hidden rounded-full border-2 border-ink bg-paper-deep"
+        role="img"
+        aria-label={`${studentCount} of ${maxStudents} student places used`}
+      >
+        <div
+          className={cn(
+            "h-full transition-[width] duration-500 motion-reduce:transition-none",
+            full ? "bg-coral" : pct >= 80 ? "bg-[#FFC93D]" : "bg-lime"
+          )}
+          style={{ width: `${Math.max(pct, studentCount > 0 ? 4 : 0)}%` }}
+        />
+      </div>
+
+      <p className="mt-2.5 text-sm text-ink-soft">
+        {full
+          ? "You're at the cap — upgrading raises it."
+          : `${maxStudents - studentCount} place${maxStudents - studentCount === 1 ? "" : "s"} left.`}
+      </p>
     </div>
   );
 }

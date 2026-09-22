@@ -271,3 +271,29 @@ export const saveResponsesSchema = z.object({
 });
 
 export type ResponsePayload = z.infer<typeof responseSchema>;
+
+/**
+ * What Razorpay Checkout hands back.
+ *
+ * `cancelled` covers the customer closing the window or the card being
+ * declined, which arrives with no payment id at all — so the three payment
+ * fields are optional here and required by the refinement below only when a
+ * payment is actually being claimed.
+ */
+export const checkoutResultSchema = z
+  .object({
+    razorpay_order_id: z.string().min(1, "Missing the order id."),
+    razorpay_payment_id: z.string().min(1).optional(),
+    razorpay_signature: z.string().min(1).optional(),
+    cancelled: z.boolean().optional().default(false),
+    reason: z.string().max(300).optional(),
+  })
+  .refine(
+    (v) => v.cancelled || (!!v.razorpay_payment_id && !!v.razorpay_signature),
+    {
+      message: "A completed payment needs both a payment id and a signature.",
+      path: ["razorpay_payment_id"],
+    }
+  );
+
+export type CheckoutResultInput = z.infer<typeof checkoutResultSchema>;

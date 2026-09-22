@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
-import School, { TRIAL_DAYS, slugifySchoolName } from "@/models/School";
+import School, { slugifySchoolName } from "@/models/School";
+import { TRIAL_DAYS, TRIAL_MAX_STUDENTS } from "@/lib/plans";
 import User, { type Role } from "@/models/User";
 import type { SignupInput } from "@/lib/validation";
 
@@ -154,6 +155,10 @@ export async function createSchoolWithAdmin(
     slug,
     plan: "trial" as const,
     planValidUntil,
+    // Set at signup rather than inferred at read time, so a school's cap is a
+    // fact about that school and does not silently change under it when the
+    // trial allowance is revised for new signups.
+    maxStudents: TRIAL_MAX_STUDENTS,
   };
 
   const build = (school: { _id: mongoose.Types.ObjectId }): SignupResult => ({

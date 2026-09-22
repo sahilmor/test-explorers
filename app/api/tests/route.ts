@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { SetupError } from "@/lib/school-setup";
+import { setupErrorResponse } from "@/lib/api-response";
 import { createTest, listTests } from "@/lib/tests";
 import { sweepSchool } from "@/lib/sweep";
 import { fieldErrors, testSchema } from "@/lib/validation";
@@ -40,13 +41,7 @@ export const POST = withAuth(
       return NextResponse.json({ test }, { status: 201 });
     } catch (error) {
       if (error instanceof SetupError) {
-        return NextResponse.json(
-          {
-            error: error.message,
-            fields: error.field ? { [error.field]: error.message } : undefined,
-          },
-          { status: error.status }
-        );
+        return setupErrorResponse(error);
       }
       console.error("[/api/tests POST] failed:", error);
       return NextResponse.json({ error: "Could not save that test." }, { status: 500 });
