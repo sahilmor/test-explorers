@@ -23,13 +23,20 @@ export const POST = withAuth(
     }
 
     const testId = (body as { testId?: unknown })?.testId;
+    const accessCode = (body as { accessCode?: unknown })?.accessCode;
     if (typeof testId !== "string" || !objectIdSchema.safeParse(testId).success) {
       return NextResponse.json({ error: "No such test." }, { status: 404 });
     }
 
     try {
       return NextResponse.json(
-        await startOrResumeAttempt(auth.schoolId, auth.userId, testId)
+        await startOrResumeAttempt(
+          auth.schoolId,
+          auth.userId,
+          testId,
+          new Date(),
+          typeof accessCode === "string" ? accessCode : undefined
+        )
       );
     } catch (error) {
       if (error instanceof SetupError) {

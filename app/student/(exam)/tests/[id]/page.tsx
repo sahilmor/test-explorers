@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SittingScreen } from "@/components/sitting/sitting-screen";
+import { AccessCodeGate } from "@/components/sitting/access-code-gate";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth";
@@ -36,6 +37,20 @@ export default async function SitTestPage({
     // the link they followed, so 404ing them would be both wrong and rude.
     if (error instanceof PlanError) {
       return <PlanClosed message={error.message} />;
+    }
+    // 428 means the request was fine and is only missing the code the
+    // invigilator reads out. That is a form to fill in, not a dead end.
+    if (error instanceof SetupError && error.status === 428) {
+      const test = await getTestHeading(session.schoolId, id);
+      if (!test) notFound();
+      return (
+        <AccessCodeGate
+          testId={id}
+          title={test.title}
+          subjectName={test.subjectName}
+          reason={error.message}
+        />
+      );
     }
     if (error instanceof SetupError) {
       // Not assigned, not open yet, already closed, another school's test —
@@ -73,4 +88,27 @@ function PlanClosed({ message }: { message: string }) {
       </div>
     </main>
   );
+}
+
+/**
+ * Just enough of the paper to name it on the code screen.
+ *
+ * Title and subject only — a student who has not been let in yet gets nothing
+ * about the questions.
+ */
+async function getTestHeading(schoolId: string, testId: string) {
+  const { connectToDatabase } = await import("@/lib/db");
+  const { default: Test } = await import("@/models/Test");
+  const { default: Subject } = await import("@/models/Subject");
+
+  await connectToDatabase();
+
+  const test = await Test.findOne({ _id: testId, schoolId }).select("title subjectId").lean();
+  if (!test) return null;
+
+  const subject = await Subject.findOne({ _id: test.subjectId, schoolId })
+    .select("name")
+    .lean();
+
+  return { title: test.title, subjectName: subject?.name ?? null };
 }

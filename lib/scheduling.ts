@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { SetupError } from "@/lib/errors";
@@ -44,6 +45,10 @@ export type ScheduledSlot = {
   startsAt: string;
   endsAt: string;
   state: SlotState;
+  /** Null unless a teacher has opened this session. Never sent to students. */
+  accessCode: string | null;
+  activatedByName: string | null;
+  activatedAt: string | null;
 };
 
 export type TestSchedule = {
@@ -73,7 +78,8 @@ function toSlot(
   doc: { _id: unknown; testId: unknown; sectionId: unknown; labId: unknown; day: string; period: number },
   labs: Map<string, { name: string } & LabTiming>,
   sections: Map<string, string>,
-  now: Date
+  now: Date,
+  activatedBy?: Map<string, string>
 ): ScheduledSlot {
   const lab = labs.get(String(doc.labId));
   const timing: LabTiming = lab ?? { periodsPerDay: 1, firstPeriodStartsAt: "09:00", periodMinutes: 45 };
@@ -92,6 +98,10 @@ function toSlot(
     startsAt: window.startsAt.toISOString(),
     endsAt: window.endsAt.toISOString(),
     state: slotState(window, now),
+    accessCode: (doc as { accessCode?: string | null }).accessCode ?? null,
+    activatedByName: activatedBy?.get(String((doc as { activatedBy?: unknown }).activatedBy)) ?? null,
+    activatedAt:
+      (doc as { activatedAt?: Date | null }).activatedAt?.toISOString() ?? null,
   };
 }
 
@@ -126,7 +136,19 @@ export async function getTestSchedule(
   );
   const sections = new Map(sectionDocs.map((s) => [String(s._id), s.name]));
 
-  const slots = slotDocs.map((s) => toSlot(s, labs, sections, now));
+  const activatorIds = slotDocs
+    .map((d) => (d as { activatedBy?: unknown }).activatedBy)
+    .filter(Boolean);
+  const activators = activatorIds.length
+    ? await mongoose.models.User.find({ _id: { $in: activatorIds } })
+        .select("name")
+        .lean()
+    : [];
+  const activatedBy = new Map(
+    (activators as { _id: unknown; name: string }[]).map((u) => [String(u._id), u.name])
+  );
+
+  const slots = slotDocs.map((s) => toSlot(s, labs, sections, now, activatedBy));
   const bySection = new Map(slots.map((s) => [s.sectionId, s]));
 
   const studentCounts = await mongoose.models.User.aggregate<{ _id: unknown; n: number }>([
@@ -333,4 +355,108 @@ export async function labTimetable(
   return docs
     .map((d) => toSlot(d, labs, sections, now))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+// ---------------------------------------------------------------------------
+// In-lab access codes
+// ---------------------------------------------------------------------------
+
+/**
+ * No 0/O or 1/I/L — a code read aloud across a lab has to survive being
+ * misheard, and a student mistyping it is a hand up the invigilator does not
+ * need.
+ */
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CODE_LENGTH = 6;
+
+function newCode(): string {
+  const bytes = randomBytes(CODE_LENGTH);
+  let out = "";
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  }
+  return out;
+}
+
+/**
+ * Opens a sitting.
+ *
+ * Only while the slot is actually running: a code that can be generated in
+ * advance is a code that can be shared in advance, which is the whole thing
+ * this exists to prevent. Re-opening returns the same code rather than a new
+ * one, so a teacher who refreshes does not lock out the class who already
+ * wrote the first one down.
+ *
+ * Who opened it is recorded on the slot. That is the accountability log.
+ */
+export async function activateSlot(
+  schoolId: string,
+  testId: string,
+  sectionId: string,
+  activatedBy: string,
+  now: Date = new Date()
+): Promise<ScheduledSlot> {
+  await connectToDatabase();
+
+  const doc = await TestSlot.findOne({ schoolId, testId, sectionId }).lean();
+  if (!doc) throw new SetupError("That class isn't scheduled for this paper.", 404);
+
+  const lab = await Lab.findOne({ _id: doc.labId, schoolId }).lean();
+  if (!lab) throw new SetupError("That lab no longer exists.", 404);
+
+  const window = periodWindow(doc.day, doc.period, timingOf(lab));
+  const state = slotState(window, now);
+
+  if (state === "upcoming") {
+    throw new SetupError(
+      `Too early. This sitting opens at ${window.startsAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })} — the code doesn't exist until then.`,
+      409
+    );
+  }
+  if (state === "finished") {
+    throw new SetupError("That sitting has finished. The code is no longer valid.", 409);
+  }
+
+  if (!doc.accessCode) {
+    await TestSlot.updateOne(
+      { _id: doc._id, accessCode: null },
+      { $set: { accessCode: newCode(), activatedBy, activatedAt: now } }
+    );
+  }
+
+  const schedule = await getTestSchedule(schoolId, testId, now);
+  const slot = schedule.slots.find((s) => s.sectionId === sectionId);
+  if (!slot) throw new SetupError("Could not read that slot back.", 500);
+  return slot;
+}
+
+/**
+ * Checks a code a student typed.
+ *
+ * Scoped to their own section's slot, so another class's live code is no use,
+ * and only while that slot is running.
+ */
+export async function verifyAccessCode(
+  schoolId: string,
+  testId: string,
+  sectionId: string,
+  code: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  await connectToDatabase();
+
+  const doc = await TestSlot.findOne({ schoolId, testId, sectionId })
+    .select("accessCode labId day period")
+    .lean();
+
+  if (!doc?.accessCode) return false;
+
+  const lab = await Lab.findOne({ _id: doc.labId, schoolId }).lean();
+  if (!lab) return false;
+
+  if (slotState(periodWindow(doc.day, doc.period, timingOf(lab)), now) !== "live") {
+    return false;
+  }
+
+  return doc.accessCode.toUpperCase() === code.trim().toUpperCase();
 }

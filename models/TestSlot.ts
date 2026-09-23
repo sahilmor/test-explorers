@@ -30,6 +30,19 @@ const testSlotSchema = new Schema(
 
     /** Who put it in the timetable. */
     scheduledBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+
+    /**
+     * The code students type to get in.
+     *
+     * Null until a teacher opens the session, and only openable while the
+     * slot is actually running — a code that exists in advance is a code that
+     * leaks in advance. Scoped to this slot, so it is useless for another
+     * class's sitting even of the same paper.
+     */
+    accessCode: { type: String, default: null },
+    /** Who opened the session. This is the accountability record. */
+    activatedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    activatedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );

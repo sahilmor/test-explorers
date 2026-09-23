@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { assertCanStartAttempt } from "@/lib/entitlements";
 import { MAX_VIOLATIONS, VIOLATION_DEBOUNCE_MS, type ViolationKind } from "@/lib/attempts-shared";
-import { slotFor } from "@/lib/scheduling";
+import { slotFor, verifyAccessCode } from "@/lib/scheduling";
 import { SetupError } from "@/lib/school-setup";
 import Attempt from "@/models/Attempt";
 import Question from "@/models/Question";
@@ -175,7 +175,9 @@ export async function startOrResumeAttempt(
   schoolId: string,
   studentId: string,
   testId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Required for a *new* start when the class has a scheduled slot. */
+  accessCode?: string
 ): Promise<SittingState> {
   await connectToDatabase();
 
@@ -207,6 +209,25 @@ export async function startOrResumeAttempt(
         throw new SetupError(
           `Your class's slot for this paper has finished — ${scheduled.slot.labName}, period ${scheduled.slot.period} on ${scheduled.slot.day}. Speak to your teacher.`,
           403
+        );
+      }
+
+      // The slot is running, so the last gate is the code the invigilator
+      // reads out in the lab. It does not exist until they open the session,
+      // which is what keeps a paper in the room it is meant to be sat in.
+      const ok =
+        accessCode !== undefined &&
+        (await verifyAccessCode(schoolId, testId, String(sectionId), accessCode, now));
+
+      if (!ok) {
+        throw new SetupError(
+          accessCode === undefined
+            ? "This sitting needs the code your teacher will read out."
+            : "That code isn't right for this sitting. Check with your teacher.",
+          // 428: the request was fine, it is just missing the thing that
+          // unlocks it — distinguishable from "you may never" and from a
+          // wrong password.
+          428
         );
       }
     } else {

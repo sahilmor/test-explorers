@@ -58,6 +58,27 @@ export function ScheduleScreen({ initial }: { initial: TestSchedule }) {
     await refresh();
   }
 
+  /** Opens the sitting and reveals the code. Only works while it is running. */
+  async function activate(sectionId: string) {
+    setBusySection(sectionId);
+    setError(null);
+
+    const res = await fetch(`/api/tests/${schedule.test.id}/schedule/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sectionId }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    setBusySection(null);
+
+    if (!res.ok) {
+      setError(payload.error ?? "Could not open that sitting.");
+      return;
+    }
+
+    await refresh();
+  }
+
   async function cancel(sectionId: string) {
     setBusySection(sectionId);
     setError(null);
@@ -128,6 +149,7 @@ export function ScheduleScreen({ initial }: { initial: TestSchedule }) {
                   busy={busySection === section.id}
                   onBook={(values) => void book(section.id, values)}
                   onCancel={() => void cancel(section.id)}
+                  onActivate={() => void activate(section.id)}
                 />
               ))}
             </ul>
@@ -173,13 +195,14 @@ export function ScheduleScreen({ initial }: { initial: TestSchedule }) {
 }
 
 function SectionRow({
-  section, labs, busy, onBook, onCancel,
+  section, labs, busy, onBook, onCancel, onActivate,
 }: {
   section: TestSchedule["sections"][number];
   labs: TestSchedule["labs"];
   busy: boolean;
   onBook: (values: { labId: string; day: string; period: number }) => void;
   onCancel: () => void;
+  onActivate: () => void;
 }) {
   const [labId, setLabId] = useState(section.slot?.labId ?? labs[0]?.id ?? "");
   const [day, setDay] = useState(section.slot?.day ?? toDayKey(new Date()));
@@ -215,6 +238,10 @@ function SectionRow({
           <Pill>Not scheduled</Pill>
         )}
       </div>
+
+      {section.slot ? (
+        <InLabPanel slot={section.slot} busy={busy} onActivate={onActivate} />
+      ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
         <SelectInput label="Lab" value={labId} onChange={setLabId}>
@@ -334,6 +361,69 @@ function Timetable({ schedule, day }: { schedule: TestSchedule; day: string }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * The invigilator's panel.
+ *
+ * The code does not exist until the sitting starts, so before then this says
+ * so rather than showing a disabled button with no explanation. Once open, the
+ * code is set large enough to read aloud across a lab, and who opened it is
+ * shown — that record is the point of logging it.
+ */
+function InLabPanel({
+  slot, busy, onActivate,
+}: {
+  slot: NonNullable<TestSchedule["sections"][number]["slot"]>;
+  busy: boolean;
+  onActivate: () => void;
+}) {
+  if (slot.state === "upcoming") {
+    return (
+      <p className="mt-3 rounded-lg border-2 border-dashed border-ink/30 bg-paper-deep/40 px-3.5 py-2.5 text-sm text-ink-soft">
+        The access code appears here when this sitting starts. There is nothing
+        to share in advance — that is deliberate.
+      </p>
+    );
+  }
+
+  if (slot.state === "finished") {
+    return (
+      <p className="mt-3 rounded-lg border-2 border-ink/25 bg-paper-deep px-3.5 py-2.5 text-sm text-ink-soft">
+        This sitting has finished.{" "}
+        {slot.accessCode ? "Its code no longer works." : "It was never opened."}
+      </p>
+    );
+  }
+
+  if (!slot.accessCode) {
+    return (
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border-2 border-ink bg-lime-wash px-3.5 py-3">
+        <p className="min-w-0 flex-1 text-sm text-ink">
+          This sitting is running now. Open it to get the code for your class.
+        </p>
+        <Button variant="ink" disabled={busy} onClick={onActivate}>
+          {busy ? "Opening…" : "Open sitting"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border-2 border-ink bg-lime px-4 py-3.5">
+      <p className="eyebrow text-ink/70">Read this out to your class</p>
+      <p className="mt-1.5 font-display text-4xl font-extrabold tracking-[0.15em] text-ink">
+        {slot.accessCode}
+      </p>
+      <p className="mt-2 text-xs text-ink/80">
+        Works only in this period, only for {slot.sectionName}.
+        {slot.activatedByName ? ` Opened by ${slot.activatedByName}` : ""}
+        {slot.activatedAt
+          ? ` at ${new Date(slot.activatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}.`
+          : "."}
+      </p>
     </div>
   );
 }

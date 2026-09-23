@@ -50,6 +50,26 @@ function livePeriod(firstStart: string, periodMinutes: number): number {
   return Math.floor(elapsed / periodMinutes) + 1;
 }
 
+let labCounter = 0;
+
+/**
+ * A lab nobody else is using.
+ *
+ * Only one period is ever live, so two tests both wanting a slot that is
+ * running right now would collide in the same lab — which is the
+ * double-booking rule working, not a bug. Each such test gets its own room.
+ */
+async function freshLab(): Promise<string> {
+  const res = await admin.post("/api/labs", {
+    name: `Scratch Lab ${++labCounter}`,
+    periodsPerDay: 12,
+    firstPeriodStartsAt: "00:00",
+    periodMinutes: 60,
+  });
+  expect(res.status, JSON.stringify(res.body)).toBe(201);
+  return res.body.lab.id as string;
+}
+
 async function makeTest(title: string, sections: string[]) {
   const res = await teacher.post("/api/tests", {
     title,
@@ -347,37 +367,64 @@ describe("the slot decides when a student may start", () => {
     expect(res.body.error).toMatch(/has finished/i);
   });
 
-  it("lets them start inside it", async () => {
+  it("lets them start inside it, with the code", async () => {
     const period = livePeriod("00:00", 60);
+    const lab = await freshLab();
 
     const moved = await teacher.request(`/api/tests/${testId}/schedule`, {
       method: "PUT",
-      json: { sectionId: sectionB, labId: otherLabId, day: dayKey(0), period },
+      json: { sectionId: sectionB, labId: lab, day: dayKey(0), period },
     });
     expect(moved.status, JSON.stringify(moved.body)).toBe(200);
     expect(moved.body.slot.state).toBe("live");
 
-    const res = await pupilB.post("/api/attempts/start", { testId });
+    // A live slot is necessary but not sufficient — the invigilator still has
+    // to open the sitting.
+    const early = await pupilB.post("/api/attempts/start", { testId });
+    expect(early.status).toBe(428);
+
+    const opened = await teacher.post(`/api/tests/${testId}/schedule/activate`, {
+      sectionId: sectionB,
+    });
+    expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+
+    const res = await pupilB.post("/api/attempts/start", {
+      testId,
+      accessCode: opened.body.slot.accessCode,
+    });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
   });
 
   it("another class's live slot does not let you in", async () => {
-    // 9B is sitting right now in Lab 2. 9A is booked for next week, and a
-    // pupil in 9A must not be able to ride along.
+    // 9B sits it right now. 9A is booked for next week, and a pupil in 9A
+    // must not be able to ride along on 9B's slot.
     const otherTest = await makeTest("Separate slots", [sectionA, sectionB]);
+    const lab = await freshLab();
 
     await teacher.request(`/api/tests/${otherTest}/schedule`, {
       method: "PUT",
-      json: { sectionId: sectionB, labId: otherLabId, day: dayKey(0), period: livePeriod("00:00", 60) },
+      json: { sectionId: sectionB, labId: lab, day: dayKey(0), period: livePeriod("00:00", 60) },
     });
     await teacher.request(`/api/tests/${otherTest}/schedule`, {
       method: "PUT",
       json: { sectionId: sectionA, labId, day: dayKey(6), period: 4 },
     });
 
-    expect((await pupilB.post("/api/attempts/start", { testId: otherTest })).status).toBe(200);
+    const opened = await teacher.post(`/api/tests/${otherTest}/schedule/activate`, {
+      sectionId: sectionB,
+    });
+    expect(
+      (await pupilB.post("/api/attempts/start", {
+        testId: otherTest,
+        accessCode: opened.body.slot.accessCode,
+      })).status
+    ).toBe(200);
 
-    const res = await pupilA.post("/api/attempts/start", { testId: otherTest });
+    // Same paper, same minute, somebody else's code and somebody else's slot.
+    const res = await pupilA.post("/api/attempts/start", {
+      testId: otherTest,
+      accessCode: opened.body.slot.accessCode,
+    });
     expect(res.status).toBe(403);
   });
 
@@ -397,5 +444,162 @@ describe("the slot decides when a student may start", () => {
     const resumed = await pupilB.post("/api/attempts/start", { testId });
     expect(resumed.status).toBe(200);
     expect((await pupilB.post(`/api/attempts/${testId}/submit`)).status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("the access code keeps a sitting in the lab", () => {
+  let testId = "";
+  let pupil: Client;
+  let outsider: Client;
+
+  beforeAll(async () => {
+    testId = await makeTest("Coded paper", [sectionA, sectionB]);
+
+    await admin.post("/api/students", {
+      name: "Coded Pupil", email: "coded@lab.test", sectionId: sectionA, password: "student password",
+    });
+    await admin.post("/api/students", {
+      name: "Other Pupil", email: "other@lab.test", sectionId: sectionB, password: "student password",
+    });
+
+    pupil = new Client(harness.baseUrl);
+    await pupil.post("/api/auth/login", { email: "coded@lab.test", password: "student password" });
+    outsider = new Client(harness.baseUrl);
+    await outsider.post("/api/auth/login", { email: "other@lab.test", password: "student password" });
+  }, 120_000);
+
+  it("cannot be generated before the sitting starts", async () => {
+    const booked = await teacher.request(`/api/tests/${testId}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId, day: dayKey(4), period: 2 },
+    });
+    expect(booked.status).toBe(200);
+    // Nothing to leak: the code does not exist yet.
+    expect(booked.body.slot.accessCode).toBeNull();
+
+    const res = await teacher.post(`/api/tests/${testId}/schedule/activate`, {
+      sectionId: sectionA,
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/too early/i);
+  });
+
+  it("refuses a student who has no code, without telling them one exists", async () => {
+    const live = livePeriod("00:00", 60);
+    await teacher.request(`/api/tests/${testId}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId: await freshLab(), day: dayKey(0), period: live },
+    });
+
+    const res = await pupil.post("/api/attempts/start", { testId });
+
+    // 428: the request was fine, it is only missing the thing that unlocks it.
+    expect(res.status).toBe(428);
+    expect(res.body.error).toMatch(/code your teacher/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/[A-Z0-9]{6}/);
+  });
+
+  it("is revealed to a teacher once the sitting is running, and logged", async () => {
+    const res = await teacher.post(`/api/tests/${testId}/schedule/activate`, {
+      sectionId: sectionA,
+    });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.slot.accessCode).toMatch(/^[A-Z0-9]{6}$/);
+    // Who opened it is the accountability record.
+    expect(res.body.slot.activatedByName).toBe("Lab Teacher");
+    expect(res.body.slot.activatedAt).toBeTruthy();
+  });
+
+  it("returns the same code when reopened, rather than locking the class out", async () => {
+    const first = await teacher.post(`/api/tests/${testId}/schedule/activate`, { sectionId: sectionA });
+    const second = await teacher.post(`/api/tests/${testId}/schedule/activate`, { sectionId: sectionA });
+
+    expect(second.body.slot.accessCode).toBe(first.body.slot.accessCode);
+  });
+
+  it("lets the class in with it", async () => {
+    const opened = await teacher.post(`/api/tests/${testId}/schedule/activate`, { sectionId: sectionA });
+    const code = opened.body.slot.accessCode as string;
+
+    const res = await pupil.post("/api/attempts/start", { testId, accessCode: code });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+  });
+
+  it("refuses a wrong code", async () => {
+    const fresh = await makeTest("Wrong code paper", [sectionA]);
+    await teacher.request(`/api/tests/${fresh}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId: await freshLab(), day: dayKey(0), period: livePeriod("00:00", 60) },
+    });
+    await teacher.post(`/api/tests/${fresh}/schedule/activate`, { sectionId: sectionA });
+
+    const res = await pupil.post("/api/attempts/start", { testId: fresh, accessCode: "ZZZZZZ" });
+
+    expect(res.status).toBe(428);
+    expect(res.body.error).toMatch(/isn't right/i);
+  });
+
+  it("another class's code is no use", async () => {
+    const shared = await makeTest("Shared paper", [sectionA, sectionB]);
+    const live = livePeriod("00:00", 60);
+
+    // 9A sits it now in Lab 1; 9B sits it now in Lab 2.
+    await teacher.request(`/api/tests/${shared}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId: await freshLab(), day: dayKey(0), period: live },
+    });
+    await teacher.request(`/api/tests/${shared}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionB, labId: await freshLab(), day: dayKey(0), period: live },
+    });
+
+    const aCode = (await teacher.post(`/api/tests/${shared}/schedule/activate`, { sectionId: sectionA }))
+      .body.slot.accessCode as string;
+
+    // A pupil in 9B holding 9A's code — the same paper, the same minute.
+    const res = await outsider.post("/api/attempts/start", { testId: shared, accessCode: aCode });
+    expect(res.status).toBe(428);
+  });
+
+  it("is never handed to a student by the schedule endpoint", async () => {
+    // The schedule carries codes, so it must stay teachers-only.
+    expect((await pupil.get(`/api/tests/${testId}/schedule`)).status).toBe(403);
+    expect(
+      (await pupil.post(`/api/tests/${testId}/schedule/activate`, { sectionId: sectionA })).status
+    ).toBe(403);
+  });
+
+  it("stops working once the sitting has finished", async () => {
+    const past = await makeTest("Finished sitting", [sectionA]);
+    const lab = await freshLab();
+    await teacher.request(`/api/tests/${past}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId: lab, day: dayKey(0), period: livePeriod("00:00", 60) },
+    });
+    const code = (await teacher.post(`/api/tests/${past}/schedule/activate`, { sectionId: sectionA }))
+      .body.slot.accessCode as string;
+
+    // Move the sitting into yesterday; the code goes stale with it.
+    const moved = await teacher.request(`/api/tests/${past}/schedule`, {
+      method: "PUT",
+      json: { sectionId: sectionA, labId: lab, day: dayKey(-1), period: 1 },
+    });
+    expect(moved.status).toBe(200);
+
+    const res = await pupil.post("/api/attempts/start", { testId: past, accessCode: code });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/has finished/i);
+  });
+
+  it("a resume needs no code — only a new start does", async () => {
+    // The pupil already started "Coded paper" above. Their slot may since have
+    // moved on; resuming must still work or a dropped connection mid-paper
+    // would strand them.
+    const res = await pupil.post("/api/attempts/start", { testId });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
   });
 });
