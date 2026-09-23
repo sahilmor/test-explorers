@@ -297,3 +297,41 @@ export const checkoutResultSchema = z
   );
 
 export type CheckoutResultInput = z.infer<typeof checkoutResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Platform owner: managing somebody else's school
+// ---------------------------------------------------------------------------
+
+export const setPlanSchema = z.object({
+  plan: z.enum(["trial", "active", "expired"]),
+  planValidUntil: dateTimeSchema,
+  maxStudents: z.coerce
+    .number()
+    .int("Use a whole number of students.")
+    .min(0, "A cap cannot be negative.")
+    .max(100_000, "That is more students than any one school has."),
+});
+
+export const platformPersonSchema = z.object({
+  role: z.enum(["teacher", "student"]),
+  name: z.string().trim().min(2, "We need a name.").max(120),
+  email: z.string().trim().toLowerCase().email("That is not a valid email address."),
+  sectionId: objectIdSchema.optional(),
+  // Blank means "generate one and show it once", the same as the school's own
+  // add-a-student form.
+  password: z.string().min(8, "Use at least 8 characters.").max(200).optional(),
+});
+
+export const platformPersonUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2, "We need a name.").max(120).optional(),
+    email: z.string().trim().toLowerCase().email("That is not a valid email address.").optional(),
+    sectionId: objectIdSchema.optional(),
+    password: z.string().min(8, "Use at least 8 characters.").max(200).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: "Nothing to change.",
+  });
+
+export type SetPlanInput = z.infer<typeof setPlanSchema>;
+export type PlatformPersonInput = z.infer<typeof platformPersonSchema>;

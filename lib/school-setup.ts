@@ -459,13 +459,27 @@ export async function listStudents(schoolId: string, filters: StudentFilters = {
 
 export async function createStudent(
   schoolId: string,
-  input: { name: string; email: string; sectionId: string; password?: string }
+  input: { name: string; email: string; sectionId: string; password?: string },
+  options: {
+    /**
+     * Skip the plan and cap check.
+     *
+     * Only ever passed by lib/platform-admin.ts. The cap is a commercial term
+     * the platform imposes on a school; the platform owner adding students on
+     * a school's behalf during onboarding is not the party it is there to
+     * restrain, and making them raise the cap before they can paste in a
+     * roster is friction for no benefit. Nothing school-facing passes this.
+     */
+    bypassPlanLimits?: boolean;
+  } = {}
 ) {
   await connectToDatabase();
 
   // Plan and cap first, so a refusal costs one round trip and never leaves a
   // half-made account behind. lib/entitlements.ts owns both rules.
-  await assertCanAddStudents(schoolId, 1);
+  if (!options.bypassPlanLimits) {
+    await assertCanAddStudents(schoolId, 1);
+  }
 
   const section = await Section.findOne({ _id: input.sectionId, schoolId })
     .select("_id name")

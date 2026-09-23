@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Pill, TableFrame, Td, Th, Tr } from "@/components/ui/data-table";
+import { SchoolSearch } from "@/components/platform/school-search";
 import { Wordmark } from "@/components/brand/wordmark";
 import { Stat } from "@/components/results/result-bits";
 import { SetupError } from "@/lib/errors";
@@ -100,65 +100,7 @@ export default async function PlatformPage() {
             </p>
           ) : (
             <div className="mt-4">
-              <TableFrame
-                tone="lime"
-                head={
-                  <tr>
-                    <Th>School</Th>
-                    <Th>Plan</Th>
-                    <Th>Valid until</Th>
-                    <Th>Students</Th>
-                    <Th>Papers</Th>
-                    <Th>Sittings</Th>
-                    <Th>Revenue</Th>
-                  </tr>
-                }
-              >
-                {schools.map((school) => (
-                  <Tr key={school.id}>
-                    <Td>
-                      <span className="font-display font-bold">{school.name}</span>
-                      <span className="block text-xs text-ink-soft">
-                        joined{" "}
-                        {new Date(school.createdAt).toLocaleDateString(undefined, {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </Td>
-                    <Td>
-                      {school.plan === "active" ? (
-                        <Pill tone="lime">Active</Pill>
-                      ) : school.plan === "trial" ? (
-                        <Pill tone="cobalt">Trial</Pill>
-                      ) : (
-                        <Pill tone="coral">Expired</Pill>
-                      )}
-                    </Td>
-                    <Td className="whitespace-nowrap text-ink-soft">
-                      {new Date(school.planValidUntil).toLocaleDateString(undefined, {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </Td>
-                    <Td className="tabular-nums">
-                      {school.studentCount}
-                      <span className="text-ink-soft"> / {school.maxStudents}</span>
-                    </Td>
-                    <Td className="tabular-nums">{school.testCount}</Td>
-                    <Td className="tabular-nums">{school.attemptCount}</Td>
-                    <Td className="font-display font-bold tabular-nums">
-                      {school.revenuePaise > 0 ? (
-                        formatPaise(school.revenuePaise)
-                      ) : (
-                        <span className="font-normal text-ink-faint">—</span>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
-              </TableFrame>
+              <SchoolSearch schools={schools} />
             </div>
           )}
         </section>
