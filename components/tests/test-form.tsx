@@ -112,7 +112,7 @@ export function TestForm({
   return (
     <form id={formId} onSubmit={onSubmit} noValidate className="flex flex-col gap-6">
       <ImplicitSubmit />
-      {planBlock ? <PlanBlockNotice message={planBlock} canUpgrade={false} /> : null}
+      {planBlock ? <PlanBlockNotice message={planBlock} /> : null}
       {formError ? <FormError>{formError}</FormError> : null}
 
       <Field

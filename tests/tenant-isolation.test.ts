@@ -403,3 +403,58 @@ describe("login does not leak which emails exist", () => {
     expect(wrongPassword.body).toEqual(unknownEmail.body);
   });
 });
+
+describe("a school cannot reach a checkout", () => {
+  /**
+   * Plans are sold outside the app and set by a super-admin, so self-serve
+   * billing is off by default (lib/billing-access.ts) and no school-facing
+   * route reaches Razorpay. This harness does not enable it, which is the
+   * production configuration.
+   *
+   * The integration itself is still exercised — tests/billing.test.ts turns
+   * the flag on and keeps it honest — so "dormant" does not decay into
+   * "broken".
+   */
+  it("answers 404, not 403, for the order and verify routes", async () => {
+    // 403 would confirm the endpoint is there and merely forbidden, which is
+    // information a school has no use for.
+    expect((await a.post("/api/billing/order")).status).toBe(404);
+    expect(
+      (await a.post("/api/billing/verify", {
+        razorpay_order_id: "order_whatever",
+        cancelled: true,
+      })).status
+    ).toBe(404);
+  });
+
+  it("does not offer a way in from the dashboard", async () => {
+    const dashboard = await a.get("/admin");
+
+    expect(dashboard.status).toBe(200);
+    // No link to a billing page, and no purchase language.
+    expect(dashboard.body).not.toContain("/admin/billing");
+    expect(dashboard.body).not.toContain("Upgrade");
+  });
+
+  it("has no billing page left to find", async () => {
+    expect((await a.get("/admin/billing")).status).toBe(404);
+  });
+
+  it("still accepts webhooks, because Razorpay is not a school", async () => {
+    // A payment taken out-of-band must still be recordable. The webhook is
+    // authenticated by signature rather than by a session, so switching
+    // self-serve off does not touch it — it refuses on the signature, which
+    // is its own guard, not on the flag.
+    const response = await fetch(`${harness.baseUrl}/api/billing/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-razorpay-signature": "not-a-real-signature",
+      },
+      body: JSON.stringify({ event: "payment.captured", payload: {} }),
+    });
+
+    expect(response.status).not.toBe(404);
+    expect([400, 501]).toContain(response.status);
+  });
+});

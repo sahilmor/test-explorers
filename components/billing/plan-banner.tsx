@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { ANNUAL_PLAN, NUDGE_DAYS, formatPaise } from "@/lib/plans";
+import { NUDGE_DAYS } from "@/lib/plans";
+import { supportEmail } from "@/lib/billing-access";
 import type { Entitlement } from "@/lib/entitlements";
 import { cn } from "cn";
 
@@ -15,6 +14,11 @@ import { cn } from "cn";
  *
  * It only appears when it has something to say: a trial, a trial running out,
  * or a lapsed plan. A school eleven months into a paid year sees nothing.
+ *
+ * There is no button. Plans are sold and paid for outside the app and set by
+ * a super-admin afterwards, so a "Renew now" here would lead nowhere — this
+ * tells the school where it stands and who to talk to, which is the honest
+ * version of the same card.
  */
 export function PlanBanner({
   entitlement,
@@ -33,22 +37,25 @@ export function PlanBanner({
   // An active plan is only worth a card when it is nearly up.
   if (plan === "active" && daysRemaining > NUDGE_DAYS) return null;
 
+  const contact = supportEmail();
+  const talkToUs = contact
+    ? `Get in touch at ${contact} and we'll sort it out.`
+    : "Get in touch with us and we'll sort it out.";
+
   const copy =
     plan === "expired"
       ? {
           band: "bg-coral",
           eyebrow: "Plan expired",
-          title: "Renew to start setting papers again",
-          body: `Everything you've built is still here and still readable — every paper, every mark, every student. What's paused is new work: setting papers, adding students, and students starting a sitting. ${formatPaise(ANNUAL_PLAN.amountPaise)} puts it all back.`,
-          cta: "Renew now",
+          title: "Your plan has ended",
+          body: `Everything you've built is still here and still readable — every paper, every mark, every student. What's paused is new work: setting papers, adding students, and students starting a sitting. ${talkToUs}`,
         }
       : plan === "active"
         ? {
             band: "bg-cobalt",
             eyebrow: "Renewing soon",
             title: `Your plan runs out on ${renewsOn}`,
-            body: `${daysRemaining === 0 ? "It expires today" : `That's ${daysRemaining} day${daysRemaining === 1 ? "" : "s"} away`}. Renewing early doesn't waste what's left — the time you've paid for gets added on.`,
-            cta: "Renew",
+            body: `${daysRemaining === 0 ? "It expires today" : `That's ${daysRemaining} day${daysRemaining === 1 ? "" : "s"} away`}. ${talkToUs}`,
           }
         : daysRemaining <= NUDGE_DAYS
           ? {
@@ -58,15 +65,13 @@ export function PlanBanner({
                 daysRemaining === 0
                   ? "Your trial ends today"
                   : `${daysRemaining} day${daysRemaining === 1 ? "" : "s"} left of your trial`,
-              body: `After that you keep everything you've got and can still read all of it — you just can't set new papers or add students until you're on a plan. ${formatPaise(ANNUAL_PLAN.amountPaise)} a year covers up to ${ANNUAL_PLAN.maxStudents} students.`,
-              cta: "See the plan",
+              body: `After that you keep everything you've got and can still read all of it — you just can't set new papers or add students. ${talkToUs}`,
             }
           : {
               band: "bg-lime",
               eyebrow: "Free trial",
               title: `${daysRemaining} days left, ${studentCount} of ${maxStudents} students`,
               body: `Your trial runs to ${renewsOn}. Everything works — this is the whole product, not a cut-down version of it.`,
-              cta: "See the plan",
             };
 
   return (
@@ -78,20 +83,12 @@ export function PlanBanner({
     >
       <span aria-hidden="true" className={cn("absolute inset-x-0 top-0 h-2.5", copy.band)} />
 
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
-        <div className="min-w-0 max-w-2xl">
-          <p className="eyebrow text-coral">{copy.eyebrow}</p>
-          <h2 className="mt-2 font-display text-xl font-extrabold tracking-tight text-ink sm:text-2xl">
-            {copy.title}
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-soft">{copy.body}</p>
-        </div>
-
-        <Button
-          size="lg"
-          variant={plan === "expired" ? "ink" : "default"}
-          render={<Link href="/admin/billing">{copy.cta}</Link>}
-        />
+      <div className="mt-2 min-w-0 max-w-2xl">
+        <p className="eyebrow text-coral">{copy.eyebrow}</p>
+        <h2 className="mt-2 font-display text-xl font-extrabold tracking-tight text-ink sm:text-2xl">
+          {copy.title}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-soft">{copy.body}</p>
       </div>
     </div>
   );
@@ -102,24 +99,23 @@ export function PlanBanner({
  * the top of a page — a form that refuses should explain itself where the
  * person is looking, not somewhere they have to scroll back to.
  */
-export function PlanBlockNotice({
-  message,
-  upgradeHref = "/admin/billing",
-  canUpgrade = true,
-}: {
-  message: string;
-  upgradeHref?: string;
-  /** Teachers see the explanation but not a Pay button — it isn't their call. */
-  canUpgrade?: boolean;
-}) {
+export function PlanBlockNotice({ message }: { message: string }) {
+  const contact = supportEmail();
+
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border-2 border-ink bg-coral-wash px-4 py-3.5"
+      className="rounded-xl border-2 border-ink bg-coral-wash px-4 py-3.5"
     >
-      <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink">{message}</p>
-      {canUpgrade ? (
-        <Button size="sm" variant="ink" render={<Link href={upgradeHref}>Renew</Link>} />
+      <p className="text-sm leading-relaxed text-ink">{message}</p>
+      {contact ? (
+        <p className="mt-1.5 text-sm text-ink">
+          Get in touch at{" "}
+          <a href={`mailto:${contact}`} className="font-display font-bold underline underline-offset-4">
+            {contact}
+          </a>
+          .
+        </p>
       ) : null}
     </div>
   );

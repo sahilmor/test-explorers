@@ -71,7 +71,11 @@ async function waitForServer(url: string, child: ChildProcess, timeoutMs = 90_00
 }
 
 export async function startHarness(
-  options: { razorpayApiBase?: string; resendApiBase?: string } = {}
+  options: {
+    razorpayApiBase?: string;
+    resendApiBase?: string;
+    selfServeBilling?: boolean;
+  } = {}
 ): Promise<Harness> {
   // mongodb-memory-server would download a mongod; if Homebrew already put one
   // on this machine, reuse it instead.
@@ -110,6 +114,10 @@ export async function startHarness(
         ...(options.razorpayApiBase
           ? { RAZORPAY_API_BASE: options.razorpayApiBase }
           : {}),
+        // Checkout is off for schools by default (see lib/billing-access.ts).
+        // The integration is still meant to work, so the billing suite turns
+        // it on explicitly and keeps testing it.
+        ...(options.selfServeBilling ? { SELF_SERVE_BILLING: "true" } : {}),
         PLATFORM_OWNER_EMAILS: TEST_OWNER_EMAIL,
         // Email. A key has to be present for sending to be attempted at all;
         // the base points at a stub the suite runs, so what gets sent can be

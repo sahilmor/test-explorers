@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeading } from "@/components/app/app-shell";
-import { NavCard } from "@/components/app/nav-card";
 import { PlanBanner } from "@/components/billing/plan-banner";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/data-table";
@@ -9,7 +8,7 @@ import { Stat } from "@/components/results/result-bits";
 import { requireRole } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
 import { getAdminStats } from "@/lib/dashboard";
-import { getEntitlement } from "@/lib/entitlements";
+import { getEntitlement, type Entitlement } from "@/lib/entitlements";
 import { listSections } from "@/lib/school-setup";
 import { sweepSchool } from "@/lib/sweep";
 import Subject from "@/models/Subject";
@@ -133,19 +132,7 @@ export default async function AdminHome() {
               maxStudents={entitlement.maxStudents}
             />
 
-            <NavCard
-              href="/admin/billing"
-              tone="cobalt"
-              title="Plan and billing"
-              body="What you're on, what it covers, and every payment you've made."
-              meta={
-                entitlement.plan === "active"
-                  ? `Active · renews in ${entitlement.daysRemaining} days`
-                  : entitlement.plan === "trial"
-                    ? `Trial · ${entitlement.daysRemaining} days left`
-                    : "Expired · renew to continue"
-              }
-            />
+            <PlanCard entitlement={entitlement} />
           </div>
         </section>
       ) : (
@@ -268,6 +255,57 @@ function StudentCapCard({
         {full
           ? "You're at the cap — upgrading raises it."
           : `${maxStudents - studentCount} place${maxStudents - studentCount === 1 ? "" : "s"} left.`}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The school's plan, as a fact rather than an offer.
+ *
+ * Plans are agreed outside the app and set by a super-admin, so there is
+ * nothing here to click. A school still needs to know what it is on and when
+ * it runs out, which is all this says.
+ */
+function PlanCard({ entitlement }: { entitlement: Entitlement }) {
+  const runsUntil = new Date(entitlement.planValidUntil).toLocaleDateString(
+    undefined,
+    { day: "numeric", month: "long", year: "numeric" }
+  );
+
+  const label =
+    entitlement.plan === "active"
+      ? "Active"
+      : entitlement.plan === "trial"
+        ? "Free trial"
+        : "Expired";
+
+  return (
+    <div className="rounded-xl border-2 border-ink bg-paper-pure p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="eyebrow text-ink-soft">Your plan</p>
+        <Pill
+          tone={
+            entitlement.plan === "active"
+              ? "lime"
+              : entitlement.plan === "trial"
+                ? "cobalt"
+                : "coral"
+          }
+        >
+          {label}
+        </Pill>
+      </div>
+
+      <p className="mt-3 font-display text-xl font-extrabold tracking-tight text-ink">
+        {entitlement.plan === "expired" ? "Ended " : "Runs until "}
+        {runsUntil}
+      </p>
+
+      <p className="mt-2 text-sm text-ink-soft">
+        {entitlement.plan === "expired"
+          ? "Everything you have stays readable. Get in touch to start setting papers again."
+          : `${entitlement.daysRemaining} day${entitlement.daysRemaining === 1 ? "" : "s"} left.`}
       </p>
     </div>
   );

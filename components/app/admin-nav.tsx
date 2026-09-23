@@ -12,7 +12,6 @@ const LINKS = [
   { href: "/admin/students", label: "Students" },
   { href: "/teacher/tests", label: "Tests" },
   { href: "/teacher/question-bank", label: "Question bank" },
-  { href: "/admin/billing", label: "Plan" },
 ] as const;
 
 /**

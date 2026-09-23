@@ -135,7 +135,9 @@ beforeAll(async () => {
   stub = new RazorpayStub("harness-key-secret");
   const apiBase = await stub.start();
 
-  harness = await startHarness({ razorpayApiBase: apiBase });
+  // Self-serve checkout is off for schools by default; this suite exists to
+  // keep the dormant integration honest, so it opts in.
+  harness = await startHarness({ razorpayApiBase: apiBase, selfServeBilling: true });
   mongo = new MongoClient(harness.mongoUri);
   await mongo.connect();
 

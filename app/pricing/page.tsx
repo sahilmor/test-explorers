@@ -26,10 +26,14 @@ export const metadata: Metadata = {
 /**
  * Public pricing.
  *
- * Every number on this page is imported from lib/plans.ts — the same module
- * the checkout charges from and the enforcement reads. A price quoted on a
- * marketing page that has drifted from the price actually charged is a
- * chargeback waiting to happen.
+ * Kept public deliberately even though buying is now sales-led: a school
+ * deciding whether to ask still needs to know roughly what it costs, and a
+ * pricing page that says "contact us" wastes everybody's afternoon.
+ *
+ * Every number is imported from lib/plans.ts — the same module the
+ * enforcement reads and, if self-serve is ever switched back on, the checkout
+ * charges from. A published price that has drifted from the enforced one is
+ * an argument waiting to happen.
  */
 export default function PricingPage() {
   const included = [
@@ -85,7 +89,7 @@ export default function PricingPage() {
                   <Button
                     variant="ink"
                     size="lg"
-                    render={<Link href="/signup">Start free, upgrade later</Link>}
+                    render={<Link href="/signup">Start your free trial</Link>}
                   />
                 </div>
               </div>
@@ -177,8 +181,8 @@ export default function PricingPage() {
                 a: "It is one database, and every single query is filtered by the school on your signed-in session — never by anything that arrives in a URL or a request body. That rule is the oldest one in the codebase and there is a test suite whose whole job is trying to break it.",
               },
               {
-                q: "How do we pay?",
-                a: "Card, UPI or netbanking through Razorpay. We never see or store your card details. Renewing early adds the time you have left onto the new year rather than throwing it away.",
+                q: "How do we actually buy it?",
+                a: "Start the free trial yourself — no card, no sales call. When you want to continue, talk to us and we will set your school up on a plan directly. There is no checkout to fight with and nothing to expense through a card you may not have.",
               },
             ].map((item) => (
               <div key={item.q} className="border-t-2 border-ink/15 pt-6">
