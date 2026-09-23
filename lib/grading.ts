@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Attempt from "@/models/Attempt";
 import Question from "@/models/Question";
-import type { AttemptStatus } from "@/lib/attempts-shared";
+import type { AttemptStatus, AutoSubmitReason } from "@/lib/attempts-shared";
 
 /**
  * Marking.
@@ -119,6 +119,8 @@ export async function finishAttempt(options: {
   responses: StoredResponse[];
   status: Exclude<AttemptStatus, "in_progress">;
   submittedAt: Date;
+  /** Only set when the student did not press the button themselves. */
+  autoSubmitReason?: AutoSubmitReason | null;
   now?: Date;
 }): Promise<Grade> {
   const key = await answerKey(options.schoolId, options.questionIds);
@@ -130,6 +132,9 @@ export async function finishAttempt(options: {
       $set: {
         status: options.status,
         submittedAt: options.submittedAt,
+        ...(options.autoSubmitReason !== undefined
+          ? { autoSubmitReason: options.autoSubmitReason }
+          : {}),
         ...grade,
         gradedAt: options.now ?? new Date(),
       },

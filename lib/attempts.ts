@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { assertCanStartAttempt } from "@/lib/entitlements";
+import { MAX_VIOLATIONS, VIOLATION_DEBOUNCE_MS, type ViolationKind } from "@/lib/attempts-shared";
 import { slotFor } from "@/lib/scheduling";
 import { SetupError } from "@/lib/school-setup";
 import Attempt from "@/models/Attempt";
@@ -48,6 +49,9 @@ export type SittingState = {
     submittedAt: string | null;
     lastSavedAt: string | null;
     responses: SittingResponse[];
+    /** Survives a refresh, a crash and a change of device. */
+    violationCount: number;
+    violationLimit: number;
   };
   test: {
     id: string;
@@ -283,6 +287,8 @@ export async function getAttemptState(
           ? null
           : (attempt.submittedAt ?? deadline).toISOString(),
       lastSavedAt: attempt.lastSavedAt?.toISOString() ?? null,
+      violationCount: (attempt.violations ?? []).length,
+      violationLimit: MAX_VIOLATIONS,
       responses: (attempt.responses ?? []).map((r) => ({
         questionId: String(r.questionId),
         selectedOptionIndex:
@@ -590,4 +596,99 @@ export async function sweepExpiredAttempts(
     submitted: expired.length,
     attemptIds: expired.map((e) => String(e.attempt._id)),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Exam integrity
+// ---------------------------------------------------------------------------
+
+export type ViolationResult = {
+  count: number;
+  limit: number;
+  /** True when this one was folded into the previous violation. */
+  ignored: boolean;
+  autoSubmitted: boolean;
+};
+
+/**
+ * Records that a student left the test screen.
+ *
+ * Counted on the server for the obvious reason: a count held in the browser is
+ * a count a refresh resets. Answers already survive a crash, and a student's
+ * warnings have to survive one too or the rule means nothing.
+ *
+ * Bursts are collapsed. Leaving fullscreen usually fires three different
+ * events within a few hundred milliseconds, and spending a student's whole
+ * allowance on one press of Escape would be indefensible.
+ *
+ * Nothing is recorded against an attempt that is already finished — a late
+ * `visibilitychange` as the submitted page unloads is not cheating.
+ */
+export async function recordViolation(
+  schoolId: string,
+  studentId: string,
+  testId: string,
+  kind: ViolationKind,
+  now: Date = new Date()
+): Promise<ViolationResult> {
+  await connectToDatabase();
+
+  const attempt = await Attempt.findOne({ schoolId, testId, studentId }).lean();
+  if (!attempt) throw new SetupError("You haven't started this test.", 404);
+
+  const violations = attempt.violations ?? [];
+  const count = violations.length;
+
+  if (attempt.status !== "in_progress") {
+    return { count, limit: MAX_VIOLATIONS, ignored: true, autoSubmitted: true };
+  }
+
+  const last = violations.at(-1);
+  if (last && now.getTime() - new Date(last.at).getTime() < VIOLATION_DEBOUNCE_MS) {
+    return { count, limit: MAX_VIOLATIONS, ignored: true, autoSubmitted: false };
+  }
+
+  // Guarded on the attempt still being in progress and on the count not having
+  // moved, so two tabs reporting at once cannot both push.
+  const pushed = await Attempt.updateOne(
+    {
+      _id: attempt._id,
+      status: "in_progress",
+      [`violations.${count}`]: { $exists: false },
+    },
+    { $push: { violations: { kind, at: now } } }
+  );
+
+  if (pushed.matchedCount === 0) {
+    const fresh = await Attempt.findById(attempt._id).select("violations status").lean();
+    return {
+      count: (fresh?.violations ?? []).length,
+      limit: MAX_VIOLATIONS,
+      ignored: true,
+      autoSubmitted: fresh?.status !== "in_progress",
+    };
+  }
+
+  const newCount = count + 1;
+
+  if (newCount < MAX_VIOLATIONS) {
+    return { count: newCount, limit: MAX_VIOLATIONS, ignored: false, autoSubmitted: false };
+  }
+
+  // Third strike. Submitted through the same path as any other ending, so it
+  // is graded identically — the only difference is the reason recorded.
+  const test = await Test.findOne({ _id: testId, schoolId }).select("questionIds").lean();
+
+  await finishAttempt({
+    attemptId: attempt._id,
+    schoolId,
+    questionIds: test?.questionIds ?? [],
+    responses: attempt.responses ?? [],
+    status: "auto_submitted",
+    submittedAt: now,
+    autoSubmitReason: "integrity",
+    now,
+  });
+
+  return { count: newCount, limit: MAX_VIOLATIONS, ignored: false, autoSubmitted: true };
 }

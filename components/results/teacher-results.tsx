@@ -314,8 +314,17 @@ function StudentResultRow({ row }: { row: StudentRow }) {
       <Td>
         {missing ? (
           <Pill>Not attempted</Pill>
+        ) : row.autoSubmitReason === "integrity" ? (
+          // A paper taken away is a different fact from one handed in late,
+          // and the teacher reading this table needs to be able to tell.
+          <>
+            <Pill tone="danger">Integrity violation</Pill>
+            <span className="mt-1 block text-xs text-ink-soft">
+              left the test screen {row.violationCount} times
+            </span>
+          </>
         ) : row.status === "auto_submitted" ? (
-          <Pill tone="coral">Auto-submitted</Pill>
+          <Pill tone="coral">Ran out of time</Pill>
         ) : (
           <Pill tone="lime">Submitted</Pill>
         )}

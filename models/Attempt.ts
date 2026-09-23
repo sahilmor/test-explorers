@@ -1,5 +1,9 @@
 import mongoose, { Schema, type InferSchemaType, type Model } from "mongoose";
-import { ATTEMPT_STATUSES } from "@/lib/attempts-shared";
+import {
+  ATTEMPT_STATUSES,
+  AUTO_SUBMIT_REASONS,
+  VIOLATION_KINDS,
+} from "@/lib/attempts-shared";
 import { OPTION_COUNT } from "@/lib/questions-shared";
 
 // Re-exported so server code has one import for "everything about attempts",
@@ -73,6 +77,35 @@ const attemptSchema = new Schema(
 
     startedAt: { type: Date, required: true },
     submittedAt: { type: Date, required: false, default: null },
+    /**
+     * Every time this student left the test screen.
+     *
+     * Stored rather than counted in the browser, because a student who wants
+     * their warnings back would otherwise only have to refresh. It survives a
+     * crash, a flat battery and a change of device, exactly as the answers do.
+     */
+    violations: {
+      type: [
+        new Schema(
+          {
+            kind: { type: String, enum: VIOLATION_KINDS, required: true },
+            at: { type: Date, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
+    /**
+     * Why this was submitted without the student pressing the button.
+     *
+     * "deadline" is the clock running out, which is ordinary. "integrity" is
+     * the third violation, and results show it differently — a paper taken
+     * away is not the same fact as a paper handed in late.
+     */
+    autoSubmitReason: { type: String, enum: AUTO_SUBMIT_REASONS, default: null },
+
     status: {
       type: String,
       enum: ATTEMPT_STATUSES,

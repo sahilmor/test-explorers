@@ -63,8 +63,10 @@ export function StudentResultScreen({ result }: { result: StudentResult }) {
             </h1>
           </div>
 
-          {result.attempt.status === "auto_submitted" ? (
-            <Pill tone="coral">Auto-submitted</Pill>
+          {result.attempt.autoSubmitReason === "integrity" ? (
+            <Pill tone="danger">Submitted automatically</Pill>
+          ) : result.attempt.status === "auto_submitted" ? (
+            <Pill tone="coral">Ran out of time</Pill>
           ) : (
             <Pill tone="lime">Submitted</Pill>
           )}

@@ -69,3 +69,46 @@ export function attemptDeadline(
   const ownAllowance = new Date(startedAt.getTime() + durationMinutes * 60_000);
   return ownAllowance < testClosesAt ? ownAllowance : testClosesAt;
 }
+
+// ---------------------------------------------------------------------------
+// Exam integrity
+// ---------------------------------------------------------------------------
+
+/**
+ * What counts as leaving the test screen.
+ *
+ * Three signals, because no single one catches everything: the Fullscreen API
+ * notices Escape, the Page Visibility API notices a tab switch or a phone
+ * being locked, and `blur` notices another window taking focus while this tab
+ * stays visible. They overlap, which is why the server de-duplicates bursts.
+ */
+export const VIOLATION_KINDS = [
+  "fullscreen_exit",
+  "tab_hidden",
+  "window_blur",
+] as const;
+
+export type ViolationKind = (typeof VIOLATION_KINDS)[number];
+
+/** Warnings before the paper is taken away. Third strike submits. */
+export const MAX_VIOLATIONS = 3;
+
+/**
+ * Violations closer together than this count once.
+ *
+ * Leaving fullscreen fires `fullscreenchange` and often `blur` and
+ * `visibilitychange` within the same few hundred milliseconds. Counting all
+ * three would burn a student's warnings for one action, so the server collapses
+ * anything inside this window into the violation already recorded.
+ */
+export const VIOLATION_DEBOUNCE_MS = 1500;
+
+export const VIOLATION_LABELS: Record<ViolationKind, string> = {
+  fullscreen_exit: "You left fullscreen",
+  tab_hidden: "You switched away from the test",
+  window_blur: "Another window took focus",
+};
+
+/** Why an attempt was submitted without the student pressing the button. */
+export const AUTO_SUBMIT_REASONS = ["deadline", "integrity"] as const;
+export type AutoSubmitReason = (typeof AUTO_SUBMIT_REASONS)[number];

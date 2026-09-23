@@ -8,7 +8,7 @@ import Subject from "@/models/Subject";
 import Test from "@/models/Test";
 import TestAssignment from "@/models/TestAssignment";
 import User from "@/models/User";
-import type { AttemptStatus } from "@/lib/attempts-shared";
+import type { AttemptStatus, AutoSubmitReason } from "@/lib/attempts-shared";
 
 /**
  * Results.
@@ -66,6 +66,9 @@ export type StudentResult = {
   };
   attempt: {
     status: AttemptStatus;
+    /** "integrity" when the paper was taken away rather than handed in. */
+    autoSubmitReason: AutoSubmitReason | null;
+    violationCount: number;
     submittedAt: string;
     startedAt: string;
     /** Seconds between starting and submitting. */
@@ -179,6 +182,8 @@ export async function getStudentResult(
     },
     attempt: {
       status: attempt.status as AttemptStatus,
+      autoSubmitReason: (attempt.autoSubmitReason ?? null) as AutoSubmitReason | null,
+      violationCount: (attempt.violations ?? []).length,
       submittedAt: submittedAt.toISOString(),
       startedAt: attempt.startedAt.toISOString(),
       timeTakenSeconds: Math.max(
@@ -258,6 +263,8 @@ export type StudentRow = {
   email: string;
   sectionName: string | null;
   status: AttemptStatus | "not_attempted";
+  autoSubmitReason: AutoSubmitReason | null;
+  violationCount: number;
   score: number | null;
   totalQuestions: number | null;
   percentage: number | null;
@@ -404,6 +411,8 @@ export async function getTeacherResults(
         email: s.email,
         sectionName: sectionName.get(String(s.sectionId)) ?? null,
         status: "not_attempted" as const,
+        autoSubmitReason: null,
+        violationCount: 0,
         score: null,
         totalQuestions: null,
         percentage: null,
@@ -422,6 +431,8 @@ export async function getTeacherResults(
       email: s.email,
       sectionName: sectionName.get(String(s.sectionId)) ?? null,
       status: attempt.status as AttemptStatus,
+      autoSubmitReason: (attempt.autoSubmitReason ?? null) as AutoSubmitReason | null,
+      violationCount: (attempt.violations ?? []).length,
       score,
       totalQuestions: total,
       percentage: percentage(score, total),

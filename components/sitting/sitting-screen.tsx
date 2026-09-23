@@ -16,6 +16,9 @@ import {
 import { useAutosave } from "@/components/sitting/use-autosave";
 import { questionState, RESYNC_INTERVAL_MS } from "@/lib/attempts-shared";
 import type { SittingState } from "@/lib/attempts";
+import { useLockdown } from "@/components/sitting/use-lockdown";
+import { LockdownBar, LockdownGate, ViolationWarning } from "@/components/sitting/lockdown-ui";
+import type { ViolationKind } from "@/lib/attempts-shared";
 import { cn } from "cn";
 
 type Answer = {
@@ -56,6 +59,14 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
   const [finished, setFinished] = useState(
     initial.attempt.status !== "in_progress"
   );
+  /** True when the paper was taken away rather than handed in. */
+  const [integrityStopped, setIntegrityStopped] = useState(false);
+  /**
+   * The gate has been passed. Resuming an attempt that is already under way
+   * still shows it — coming back after a crash should re-enter fullscreen,
+   * and the browser will only do that from a fresh click.
+   */
+  const [started, setStarted] = useState(false);
 
   /**
    * Navigate. Marking the question visited happens here rather than in an
@@ -190,6 +201,54 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
     return { answered, marked, unanswered: questions.length - answered };
   }, [answers, questions]);
 
+  // --- exam integrity ----------------------------------------------------
+
+  /**
+   * Reports a violation and returns what the server made of it.
+   *
+   * The count is the server's, not ours — a refresh must not hand warnings
+   * back. Network trouble is swallowed: an exam should not fall over because
+   * a warning could not be filed, and the deadline and autosave both still
+   * work without it.
+   */
+  const reportViolation = useCallback(
+    async (kind: ViolationKind) => {
+      try {
+        const res = await fetch(`/api/attempts/${test.id}/violation`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind }),
+          keepalive: true,
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as {
+          count: number;
+          limit: number;
+          ignored: boolean;
+          autoSubmitted: boolean;
+        };
+      } catch {
+        return null;
+      }
+    },
+    [test.id]
+  );
+
+  const onIntegritySubmit = useCallback(() => {
+    // The server has already submitted and graded it. Stop autosaving and
+    // show the finished screen rather than racing it with another submit.
+    autosave.stop();
+    setIntegrityStopped(true);
+    setFinished(true);
+  }, [autosave]);
+
+  const lockdown = useLockdown({
+    active: !finished,
+    initialViolations: initial.attempt.violationCount,
+    onReport: reportViolation,
+    onAutoSubmit: onIntegritySubmit,
+  });
+
   // --- submitting --------------------------------------------------------
 
   const doSubmit = useCallback(async () => {
@@ -235,7 +294,24 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
         counts={counts}
         total={questions.length}
         testId={test.id}
+        integrityStopped={integrityStopped}
         closesAt={new Date(test.closesAt)}
+      />
+    );
+  }
+
+  // Nothing of the paper is rendered until the student has been told the
+  // rules and has granted fullscreen. Browsers only grant it inside a user
+  // gesture, so this button is the gesture — it cannot be done automatically.
+  if (!started) {
+    return (
+      <LockdownGate
+        supported={lockdown.status.supported}
+        onEnter={async () => {
+          await lockdown.enterFullscreen();
+          setStarted(true);
+        }}
+        onSkip={() => setStarted(true)}
       />
     );
   }
@@ -245,6 +321,25 @@ export function SittingScreen({ initial }: { initial: SittingState }) {
 
   return (
     <div className="min-h-dvh bg-paper">
+      {/* ---- integrity status, always visible ---- */}
+      <LockdownBar
+        fullscreen={lockdown.status.fullscreen}
+        supported={lockdown.status.supported}
+        violations={lockdown.status.violations}
+        limit={lockdown.status.limit}
+        onRefullscreen={() => void lockdown.enterFullscreen()}
+      />
+
+      {lockdown.status.warning ? (
+        <ViolationWarning
+          count={lockdown.status.warning.count}
+          limit={lockdown.status.limit}
+          kind={lockdown.status.warning.kind}
+          supported={lockdown.status.supported}
+          onAcknowledge={() => void lockdown.dismissWarning()}
+        />
+      ) : null}
+
       {/* ---- the bar that never moves ---- */}
       <header className="sticky top-0 z-30 border-b-2 border-ink bg-paper-pure">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3 sm:px-6">
@@ -515,12 +610,14 @@ function Submitted({
   total,
   testId,
   closesAt,
+  integrityStopped = false,
 }: {
   title: string;
   counts: { answered: number; unanswered: number };
   total: number;
   testId: string;
   closesAt: Date;
+  integrityStopped?: boolean;
 }) {
   // The mark exists already — it is worked out as part of submitting — but it
   // stays out of sight until the paper has closed for everyone.
@@ -531,17 +628,35 @@ function Submitted({
       <div className="w-full max-w-md rounded-xl border-2 border-ink bg-paper-pure p-8 text-center shadow-[5px_5px_0_var(--ink)]">
         <div
           aria-hidden="true"
-          className="mx-auto grid size-14 place-items-center rounded-full border-2 border-ink bg-lime"
+          className={`mx-auto grid size-14 place-items-center rounded-full border-2 border-ink ${
+            integrityStopped ? "bg-coral" : "bg-lime"
+          }`}
         >
-          <span className="font-display text-2xl font-extrabold text-ink">✓</span>
+          <span className="font-display text-2xl font-extrabold text-ink">
+            {integrityStopped ? "!" : "✓"}
+          </span>
         </div>
 
         <h1 className="mt-5 font-display text-2xl font-extrabold tracking-tight text-ink">
-          Submitted
+          {integrityStopped ? "Submitted automatically" : "Submitted"}
         </h1>
+
+        {/* Said plainly rather than softened. A student whose paper ended this
+            way needs to know it did, and that their teacher can see it. */}
         <p className="mt-2 text-sm text-ink-soft">
-          Your answers for <span className="font-bold text-ink">{title}</span> are
-          in. Nothing else to do.
+          {integrityStopped ? (
+            <>
+              You left the test screen three times, so{" "}
+              <span className="font-bold text-ink">{title}</span> was submitted
+              with what you had answered. Your teacher will see that it ended
+              this way — speak to them if something went wrong.
+            </>
+          ) : (
+            <>
+              Your answers for <span className="font-bold text-ink">{title}</span>{" "}
+              are in. Nothing else to do.
+            </>
+          )}
         </p>
 
         <p className="mt-5 rounded-lg border-2 border-ink bg-paper-deep px-4 py-3 text-sm text-ink">
