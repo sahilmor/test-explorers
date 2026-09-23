@@ -132,7 +132,7 @@ export function StudentsScreen({
       <AdminHeader
         eyebrow="School setup"
         title="Students"
-        blurb="Everyone who sits papers. Add them one at a time, or import a whole year group from a spreadsheet."
+        blurb="Everyone who sits papers. Add them one at a time, or import a whole year group from a spreadsheet if you have one."
         action={
           rows.length > 0 ? (
             <>
@@ -164,18 +164,27 @@ export function StudentsScreen({
         <EmptyState
           tone="cobalt"
           title="No students yet"
-          body="Import a spreadsheet to add a whole year group at once, or add them one at a time if you're just getting started."
+          /*
+           * Adding one leads, and the CSV follows.
+           *
+           * This is the first screen a new school meets, and leading with
+           * "Import a CSV" quietly assumes somebody there is comfortable
+           * exporting and formatting a spreadsheet. Plenty of schools have
+           * nobody like that, and the ones that do can still see the shortcut
+           * — it just is not the thing standing in everyone else's way.
+           */
+          body="Add them one at a time — it takes about fifteen seconds each. If you already have a spreadsheet of your year group, you can import the whole thing instead."
           action={
             <div className="flex flex-wrap justify-center gap-3">
-              <Button variant="ink" size="lg" onClick={() => setImporting(true)}>
-                Import a CSV
+              <Button variant="ink" size="lg" onClick={() => setDraft(newDraft())}>
+                Add a student
               </Button>
-              <Button variant="outline" size="lg" onClick={() => setDraft(newDraft())}>
-                Add one student
+              <Button variant="outline" size="lg" onClick={() => setImporting(true)}>
+                Import a spreadsheet
               </Button>
             </div>
           }
-          hint="The CSV needs three columns: name, email, section."
+          hint="No spreadsheet needed. The CSV route wants three columns: name, email, section."
         />
       ) : (
         <>

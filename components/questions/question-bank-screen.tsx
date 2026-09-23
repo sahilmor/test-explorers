@@ -252,22 +252,25 @@ export function QuestionBankScreen({
       ) : totalInBank === 0 ? (
         <EmptyState
           title="Your question bank is empty"
-          body="Import a spreadsheet to fill a subject in one go, or write questions one at a time. Either way you only do it once — papers get built from this later."
+          /* Writing one leads. See the note on the students empty state: a
+             teacher who has never exported a spreadsheet should not meet one
+             as the first instruction in the product. */
+          body="Write your first question — it takes a minute, and you only do it once because papers get built from this later. If you already have questions in a spreadsheet, you can import the lot instead."
           action={
             <div className="flex flex-wrap justify-center gap-3">
-              <Button size="lg" onClick={() => setImporting(true)}>
-                Import a CSV
+              <Button size="lg" onClick={() => setDraft(EMPTY_DRAFT)}>
+                Write a question
               </Button>
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => setDraft(EMPTY_DRAFT)}
+                onClick={() => setImporting(true)}
               >
-                Write one question
+                Import a spreadsheet
               </Button>
             </div>
           }
-          hint="The CSV needs subject, question, the four options, the correct letter and a difficulty."
+          hint="No spreadsheet needed. The CSV route wants subject, question, the four options, the correct letter and a difficulty."
         />
       ) : (
         <>
