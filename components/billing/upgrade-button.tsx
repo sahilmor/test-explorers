@@ -170,15 +170,20 @@ export function UpgradeButton({
       });
 
       checkout.on("payment.failed", (payload: unknown) => {
-        const described =
-          (payload as { error?: { description?: string } })?.error?.description ??
-          "The payment was declined.";
+        const error = (payload as {
+          error?: { description?: string; metadata?: { payment_id?: string } };
+        })?.error;
 
         setStatus({ kind: "verifying" });
         void verify({
           razorpay_order_id: order.orderId,
+          // The id lets the server ask Razorpay what actually went wrong.
+          // Checkout's own description is often the short customer-facing
+          // line ("Please use another method") while the API carries the
+          // sentence that says what to do instead.
+          razorpay_payment_id: error?.metadata?.payment_id,
           cancelled: true,
-          reason: described,
+          reason: error?.description ?? "The payment was declined.",
         });
       });
 

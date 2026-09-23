@@ -291,8 +291,25 @@ export async function recordFailure(options: {
   orderId: string;
   paymentId?: string | null;
   reason: string;
+  /** Ask Razorpay for its own description rather than the browser's. */
+  enrich?: boolean;
 }): Promise<void> {
   await connectToDatabase();
+
+  let reason = options.reason;
+
+  // Checkout hands the browser a short customer-facing line; the API carries
+  // the one that says what to do instead. When we have a payment id, the
+  // second is worth a round trip — this row is what a support conversation
+  // will be answered from.
+  if (options.enrich && options.paymentId) {
+    try {
+      const payment = await fetchPayment(options.paymentId);
+      if (payment.error_description) reason = payment.error_description;
+    } catch {
+      // Keep the browser's reason. A failed lookup must not lose the record.
+    }
+  }
 
   await School.updateOne(
     {
@@ -308,7 +325,7 @@ export async function recordFailure(options: {
       $set: {
         "subscriptionHistory.$.status": "failed",
         "subscriptionHistory.$.razorpayPaymentId": options.paymentId ?? null,
-        "subscriptionHistory.$.failureReason": options.reason.slice(0, 300),
+        "subscriptionHistory.$.failureReason": reason.slice(0, 300),
       },
     }
   );

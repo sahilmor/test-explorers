@@ -33,7 +33,11 @@ export const POST = withAuth(
       await recordFailure({
         schoolId: auth.schoolId,
         orderId: parsed.data.razorpay_order_id,
+        paymentId: parsed.data.razorpay_payment_id ?? null,
         reason: parsed.data.reason?.slice(0, 300) ?? "Cancelled at the payment window.",
+        // Only worth asking Razorpay when a payment actually got far enough
+        // to have an id. Closing the window never does.
+        enrich: Boolean(parsed.data.razorpay_payment_id),
       });
 
       return NextResponse.json(
