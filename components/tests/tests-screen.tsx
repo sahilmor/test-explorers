@@ -277,6 +277,12 @@ export function TestsScreen({
               <Td className="text-right align-top">
                 <div className="flex justify-end gap-1">
                   <Link
+                    href={`/teacher/tests/${row.id}/schedule`}
+                    className="inline-flex min-h-11 items-center rounded-md border-2 border-transparent px-2.5 font-display text-xs font-bold tracking-tight text-ink-soft transition-colors hover:border-ink hover:bg-lime-wash hover:text-ink focus-visible:border-ink focus-visible:outline-none sm:min-h-0 sm:py-1"
+                  >
+                    Schedule
+                  </Link>
+                  <Link
                     href={`/teacher/tests/${row.id}/results`}
                     // Matches RowAction: a thumb-sized target on a phone,
                     // compact again once there is a mouse.

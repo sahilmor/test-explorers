@@ -335,3 +335,35 @@ export const platformPersonUpdateSchema = z
 
 export type SetPlanInput = z.infer<typeof setPlanSchema>;
 export type PlatformPersonInput = z.infer<typeof platformPersonSchema>;
+
+// ---------------------------------------------------------------------------
+// Labs and scheduling
+// ---------------------------------------------------------------------------
+
+export const labSchema = z.object({
+  name: z.string().trim().min(1, "Give the lab a name.").max(80),
+  capacity: z.coerce.number().int().min(0).max(10_000).nullable().optional(),
+  periodsPerDay: z.coerce
+    .number()
+    .int("Use a whole number of periods.")
+    .min(1, "A lab needs at least one period.")
+    .max(12, "12 periods is the most in a school day."),
+  firstPeriodStartsAt: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Use a time like 09:00."),
+  periodMinutes: z.coerce
+    .number()
+    .int("Use a whole number of minutes.")
+    .min(15, "A period needs at least 15 minutes.")
+    .max(240, "240 minutes is the longest a period can run."),
+});
+
+export const scheduleSlotSchema = z.object({
+  sectionId: objectIdSchema,
+  labId: objectIdSchema,
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
+  period: z.coerce.number().int().min(1).max(12),
+});
+
+export type LabInputShape = z.infer<typeof labSchema>;
+export type ScheduleSlotInput = z.infer<typeof scheduleSlotSchema>;

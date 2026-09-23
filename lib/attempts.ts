@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { assertCanStartAttempt } from "@/lib/entitlements";
+import { slotFor } from "@/lib/scheduling";
 import { SetupError } from "@/lib/school-setup";
 import Attempt from "@/models/Attempt";
 import Question from "@/models/Question";
@@ -184,13 +185,35 @@ export async function startOrResumeAttempt(
     // branch entirely.
     await assertCanStartAttempt(schoolId, now);
 
-    // Only block a *new* start outside the window. A student already sitting
-    // keeps their attempt so it can be submitted properly rather than vanish.
-    if (now < test.opensAt) {
-      throw new SetupError("This test hasn't opened yet.", 403);
-    }
-    if (now >= test.closesAt) {
-      throw new SetupError("This test has closed.", 403);
+    // A scheduled slot, if there is one, is what decides — a class sitting
+    // this in Lab 2 third period cannot start in second period just because
+    // the paper's own window happens to be open. Unscheduled papers fall back
+    // to that window exactly as before, which is what a school not using labs
+    // gets.
+    const scheduled = await slotFor(schoolId, testId, String(sectionId), now);
+
+    if (scheduled) {
+      if (now < scheduled.window.startsAt) {
+        throw new SetupError(
+          `Your class sits this in ${scheduled.slot.labName}, period ${scheduled.slot.period} on ${scheduled.slot.day} (${scheduled.slot.periodLabel}). You can't start before then.`,
+          403
+        );
+      }
+      if (now >= scheduled.window.endsAt) {
+        throw new SetupError(
+          `Your class's slot for this paper has finished — ${scheduled.slot.labName}, period ${scheduled.slot.period} on ${scheduled.slot.day}. Speak to your teacher.`,
+          403
+        );
+      }
+    } else {
+      // Only block a *new* start outside the window. A student already sitting
+      // keeps their attempt so it can be submitted properly rather than vanish.
+      if (now < test.opensAt) {
+        throw new SetupError("This test hasn't opened yet.", 403);
+      }
+      if (now >= test.closesAt) {
+        throw new SetupError("This test has closed.", 403);
+      }
     }
     if ((test.questionIds ?? []).length === 0) {
       throw new SetupError("This test has no questions in it yet.", 409);
