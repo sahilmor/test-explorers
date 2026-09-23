@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { APP_NAME } from "@/lib/brand";
 
 /**
  * Razorpay Checkout, from the browser side.
@@ -143,7 +144,7 @@ export function UpgradeButton({
         amount: order.amountPaise,
         currency: order.currency,
         order_id: order.orderId,
-        name: "TestManager",
+        name: APP_NAME,
         description: `${order.planName} plan — ${order.schoolName}`,
         prefill: { name: prefill?.name ?? "", email: prefill?.email ?? "" },
         theme: { color: "#12100E" },

@@ -65,7 +65,7 @@ pretending to take payments.
      a named database rather than `test`:
 
    ```
-   mongodb+srv://school_tests_app:REALPASSWORD@school-tests.ab1cd.mongodb.net/school-online-test-manager?retryWrites=true&w=majority&appName=school-tests
+   mongodb+srv://school_tests_app:REALPASSWORD@school-tests.ab1cd.mongodb.net/shalasys?retryWrites=true&w=majority&appName=school-tests
    ```
 
 ### 5. Test it locally
@@ -97,7 +97,7 @@ Create an empty repo on GitHub (no README, no .gitignore — this repo has both)
 then:
 
 ```bash
-git remote add origin https://github.com/YOUR_USERNAME/school-online-test-manager.git
+git remote add origin https://github.com/YOUR_USERNAME/shalasys.git
 git branch -M main
 git push -u origin main
 ```
@@ -130,10 +130,17 @@ Then click **Deploy**.
 ### 4. Verify the live deployment
 
 When the build finishes, Vercel gives you a URL like
-`https://school-online-test-manager.vercel.app`.
+`https://<your-vercel-project>.vercel.app`.
 
-1. Open the root URL — you should see the "School Online Test Manager"
-   placeholder card.
+> **Note on the name.** The product was renamed to Shalasys after this
+> project was created, so the existing Vercel project — and therefore the
+> live URL — is still `school-online-test-manager`. Nothing breaks: the
+> project name and the product name are unrelated. To line them up, rename
+> the project in **Vercel → Settings → General → Project Name**, which
+> changes the `*.vercel.app` URL, then update `APP_URL` and the Razorpay
+> webhook URL to match. A custom domain makes the point moot.
+
+1. Open the root URL — you should see the Shalasys landing page.
 2. Open `/api/ping` on that domain. Success is:
 
    ```json
@@ -148,7 +155,7 @@ When the build finishes, Vercel gives you a URL like
 3. Reload a couple of times and watch `totalPings` climb. That is the proof:
    the live Vercel deployment is writing to and reading from Atlas.
 4. Cross-check in Atlas: **Clusters → Browse Collections**. You should see the
-   `school-online-test-manager` database with a `pings` collection holding your
+   `shalasys` database with a `pings` collection holding your
    documents.
 
 If `/api/ping` returns `{"ok":false,...}`, read the `error` field, and check the
@@ -292,7 +299,7 @@ RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
    DNS records it gives you, wait for verification, then set
 
 ```
-EMAIL_FROM="TestManager <tests@yourschooldomain.com>"
+EMAIL_FROM="Shalasys <tests@yourschooldomain.com>"
 ```
 
 Until you do, mail to anyone other than you will be rejected by Resend, and

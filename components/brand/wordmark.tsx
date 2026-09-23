@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cn } from "cn";
+import { APP_NAME_PARTS } from "@/lib/brand";
 
 /**
  * The lockup: a filled answer bubble followed by the name. The bubble is the
@@ -33,7 +34,8 @@ export function Wordmark({
         <span className="size-3 rounded-full bg-lime" />
       </span>
       <span className="text-lg leading-none">
-        Test<span className="text-coral">Manager</span>
+        {APP_NAME_PARTS.head}
+        <span className="text-coral">{APP_NAME_PARTS.tail}</span>
       </span>
     </span>
   );

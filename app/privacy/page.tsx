@@ -6,7 +6,7 @@ import { TRIAL_DAYS } from "@/lib/plans";
 export const metadata: Metadata = {
   title: "Privacy policy",
   description:
-    "What TestManager stores about a school and its students, why, where it lives, who can see it, and how to get it back or have it deleted.",
+    "What Shalasys stores about a school and its students, why, where it lives, who can see it, and how to get it back or have it deleted.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -21,7 +21,7 @@ export default function PrivacyPage() {
     >
       <Clause heading="Who we are">
         <p>
-          TestManager (&ldquo;the service&rdquo;) is operated by <Fill>[legal entity name]</Fill>,
+          Shalasys (&ldquo;the service&rdquo;) is operated by <Fill>[legal entity name]</Fill>,
           registered at <Fill>[registered address]</Fill>. For anything about this
           policy, write to <Fill>[privacy contact email]</Fill>.
         </p>

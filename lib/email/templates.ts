@@ -1,3 +1,4 @@
+import { APP_NAME, APP_NAME_PARTS } from "@/lib/brand";
 import { ANNUAL_PLAN } from "@/lib/plans";
 import { appUrl } from "@/lib/email/send";
 
@@ -62,7 +63,7 @@ function shell(options: {
           <span style="display:inline-block;width:18px;height:18px;border:2px solid ${INK};border-radius:50%;vertical-align:middle;">
             <span style="display:block;width:8px;height:8px;margin:3px;border-radius:50%;background:${LIME};"></span>
           </span>
-          <span style="vertical-align:middle;margin-left:8px;font-size:18px;font-weight:800;letter-spacing:-0.03em;color:${INK};">Test<span style="color:${CORAL};">Manager</span></span>
+          <span style="vertical-align:middle;margin-left:8px;font-size:18px;font-weight:800;letter-spacing:-0.03em;color:${INK};">${APP_NAME_PARTS.head}<span style="color:${CORAL};">${APP_NAME_PARTS.tail}</span></span>
         </td></tr>
 
         <tr><td style="background:${PAPER_PURE};border:2px solid ${INK};border-radius:12px;padding:0;">
@@ -83,7 +84,7 @@ function shell(options: {
 
         <tr><td style="padding-top:18px;font-size:12px;line-height:1.6;color:${INK_SOFT};">
           ${options.footnote ? `${escapeHtml(options.footnote)}<br><br>` : ""}
-          Sent by your school through TestManager. If you weren't expecting this,
+          Sent by your school through ${APP_NAME}. If you weren't expecting this,
           your school administrator can explain — please don't reply to this address.
         </td></tr>
 

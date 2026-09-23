@@ -5,6 +5,7 @@ import { PublicShell } from "@/components/marketing/public-shell";
 import { Button } from "@/components/ui/button";
 import { BubbleGrid } from "@/components/brand/bubble-grid";
 import { Marker } from "@/components/brand/marker";
+import { APP_NAME } from "@/lib/brand";
 import { HOME_FOR_ROLE } from "@/lib/auth";
 import { getLiveSession } from "@/lib/current-user";
 import { ANNUAL_PLAN, TRIAL_DAYS, TRIAL_MAX_STUDENTS, formatPaise } from "@/lib/plans";
@@ -16,16 +17,16 @@ export const metadata: Metadata = {
     "Set a paper once, send it to every class, and have it marked before the bell. Internal assessments for one school — question bank, scheduled papers, autosaving test screen, instant marking and class analysis.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "TestManager — run your school's tests online",
+    title: `${APP_NAME} — run your school's tests online`,
     description:
       "Set a paper once, send it to every class, and have it marked before the bell. Built for one school's own internal assessments.",
     url: "/",
-    siteName: "TestManager",
+    siteName: APP_NAME,
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "TestManager — run your school's tests online",
+    title: `${APP_NAME} — run your school's tests online`,
     description:
       "Set a paper once, send it to every class, and have it marked before the bell.",
   },

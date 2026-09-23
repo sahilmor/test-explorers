@@ -1,3 +1,5 @@
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
+
 /**
  * The site's own address.
  *
@@ -16,10 +18,9 @@ export function siteUrl(): string {
   return "http://localhost:3000";
 }
 
-export const SITE_NAME = "TestManager";
+export const SITE_NAME = APP_NAME;
 
-export const SITE_DESCRIPTION =
-  "Run your school's tests online instead of on paper. Set a paper once, send it to every class, and have it marked before the bell.";
+export const SITE_DESCRIPTION = APP_TAGLINE;
 
 /** Pages a crawler should index. Everything else is behind a login. */
 export const PUBLIC_ROUTES = ["/", "/pricing", "/privacy", "/terms", "/login", "/signup"] as const;

@@ -1,4 +1,4 @@
-# School Online Test Manager
+# Shalasys
 
 A platform for schools to run their own internal tests and assessments online
 instead of on paper.
@@ -120,7 +120,7 @@ Razorpay payment as the thing that changes it.
    cp .env.local.example .env.local
    ```
 
-   Use either a local MongoDB (`mongodb://127.0.0.1:27017/school-online-test-manager`)
+   Use either a local MongoDB (`mongodb://127.0.0.1:27017/shalasys`)
    or an Atlas connection string — see [docs/setup.md](docs/setup.md).
 
 3. Start the dev server:

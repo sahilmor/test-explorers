@@ -126,7 +126,7 @@ export async function startHarness(
           ? {
               RESEND_API_KEY: "re_test_harness",
               RESEND_API_BASE: options.resendApiBase,
-              EMAIL_FROM: "TestManager <tests@harness.invalid>",
+              EMAIL_FROM: "Shalasys <tests@harness.invalid>",
               APP_URL: baseUrl,
             }
           : {}),

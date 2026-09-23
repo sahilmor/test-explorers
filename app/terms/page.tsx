@@ -6,7 +6,7 @@ import { ANNUAL_PLAN, TRIAL_DAYS, TRIAL_MAX_STUDENTS, formatPaise } from "@/lib/
 export const metadata: Metadata = {
   title: "Terms of service",
   description:
-    "The agreement between a school and TestManager: what the service does, what it costs, what happens when a plan lapses, and who owns the content.",
+    "The agreement between a school and Shalasys: what the service does, what it costs, what happens when a plan lapses, and who owns the content.",
   alternates: { canonical: "/terms" },
 };
 

@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/brand";
 /**
  * Sending email, through Resend's REST API.
  *
@@ -47,7 +48,7 @@ export function emailConfig(): { apiKey: string; from: string } | null {
     // Resend accepts onboarding@resend.dev with no domain verification, which
     // is enough to prove delivery before a domain is set up. Override it with
     // EMAIL_FROM once yours is verified.
-    from: process.env.EMAIL_FROM?.trim() || "TestManager <onboarding@resend.dev>",
+    from: process.env.EMAIL_FROM?.trim() || `${APP_NAME} <onboarding@resend.dev>`,
   };
 }
 

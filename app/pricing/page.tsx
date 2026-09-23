@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckIcon } from "lucide-react";
 import { PublicShell } from "@/components/marketing/public-shell";
+import { APP_NAME } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import {
   ANNUAL_PLAN,
@@ -15,10 +16,10 @@ export const metadata: Metadata = {
   description: `One plan: ${formatPaise(ANNUAL_PLAN.amountPaise)} per school per year, up to ${ANNUAL_PLAN.maxStudents} students. No per-teacher charge and no per-paper charge. Start with a ${TRIAL_DAYS}-day free trial.`,
   alternates: { canonical: "/pricing" },
   openGraph: {
-    title: "TestManager pricing — one plan, one price",
+    title: `${APP_NAME} pricing — one plan, one price`,
     description: `${formatPaise(ANNUAL_PLAN.amountPaise)} per school per year, up to ${ANNUAL_PLAN.maxStudents} students. ${TRIAL_DAYS}-day free trial, no card needed.`,
     url: "/pricing",
-    siteName: "TestManager",
+    siteName: APP_NAME,
     type: "website",
   },
 };

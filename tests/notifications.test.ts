@@ -143,7 +143,9 @@ describe("when a paper is set", () => {
     expect(one.subject).toContain("Unit 1 — Assigned");
     expect(one.subject).toContain("Physics");
     // On brand rather than a wall of plain text, and with a way back in.
-    expect(one.html).toContain("TestManager");
+    // The wordmark is split across two coloured spans, so the contiguous
+    // name appears in the footer line rather than the header.
+    expect(one.html).toContain("Sent by your school through Shalasys");
     expect(one.html).toContain(`${harness.baseUrl}/student`);
     // And readable without HTML at all.
     expect(one.text).toContain("Unit 1 — Assigned");

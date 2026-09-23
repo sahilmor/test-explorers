@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
+import { APP_NAME, APP_NAME_PARTS } from "@/lib/brand";
 import { SITE_NAME } from "@/lib/site";
 
-export const alt = "TestManager — run your school's tests online";
+export const alt = `${APP_NAME} — run your school's tests online`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -50,8 +51,8 @@ export default function OpengraphImage() {
             <div style={{ width: 18, height: 18, borderRadius: 999, background: LIME }} />
           </div>
           <div style={{ display: "flex", fontSize: 34, fontWeight: 800, letterSpacing: -1 }}>
-            <span style={{ color: INK }}>Test</span>
-            <span style={{ color: CORAL }}>Manager</span>
+            <span style={{ color: INK }}>{APP_NAME_PARTS.head}</span>
+            <span style={{ color: CORAL }}>{APP_NAME_PARTS.tail}</span>
           </div>
         </div>
 

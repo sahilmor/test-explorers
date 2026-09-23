@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/brand/wordmark";
+import { APP_NAME } from "@/lib/brand";
 
 const NAV = [
   { href: "/pricing", label: "Pricing" },
@@ -76,7 +77,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </div>
 
           <p className="mt-10 border-t-2 border-paper/15 pt-6 text-xs text-paper/45">
-            © {new Date().getFullYear()} TestManager. Built for schools that
+            © {new Date().getFullYear()} {APP_NAME}. Built for schools that
             would rather not photocopy another answer sheet.
           </p>
         </div>
